@@ -38,25 +38,20 @@ class RFPulse(NVAveragerProgram):
    def initialize(self):
        # NVConfiguration class does not have Gain units unlike freq, time, or phase
        # need to call: cfg.add_unitless_linear_sweep(gain, start, stop, delta, nsweep_points)
-       #self.check_cfg() #?
-
 
        # Get mw registers
        self.declare_gen(ch=self.cfg.mw_channel, nqz=self.cfg.mw_nqz)
-       #self.setup_readout() # required
 
+       self.default_pulse_registers(ch=self.cfg.mw_channel,
+                                        style='const',
+                                        freq=self.cfg.mw_freg,
+                                        length=self.cfg.pulse_len_treg,
+                                        gain=self.cfg.gain)
 
+       self.set_pulse_registers(ch=self.cfg.mw_channel,
+                                    phase=0)
 
-
-       self.set_pulse_registers(
-           ch=self.cfg.mw_channel,
-           style='const',
-           freq=self.cfg.mw_freg,
-           gain=self.cfg.gain,
-           length=self.cfg.pulse_len_treg, # pulse len
-           phase=0)
-      
-       self.synci(self.cfg.init_delay_treg)  # give processor some time to configure pulses
+       self.synci(500)  # give processor some time to configure pulses
 
 
 
@@ -64,6 +59,10 @@ class RFPulse(NVAveragerProgram):
    def body(self):
        # Pulse MW channel
        for rep in range(self.cfg.num_pulses):
-           self.pulse(ch=self.cfg.mw_channel) # rep is needed b/c need it on the timeline
+           self.set_pulse_registers(ch=self.cfg.mw_channel, phase=self.deg2reg(0))
+           self.pulse(ch=self.cfg.mw_channel) 
            self.sync_all(self.cfg.relax_delay_treg)
+           self.set_pulse_registers(ch=self.cfg.mw_channel, phase=self.deg2reg(90))
+           self.pulse(ch=self.cfg.mw_channel)
+           self.sync_all(self.cfg.relax_delay_treg) 
 
