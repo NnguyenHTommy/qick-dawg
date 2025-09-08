@@ -70,7 +70,7 @@ class NVQickSweep(AbsQickSweep):
         self.stop = stop
         self.expts = expts
 
-        step_val = (stop - start) / (expts - 1)
+        step_val = (stop - start) / (expts)
 
         self.step_val = step_val
 

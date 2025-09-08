@@ -158,7 +158,7 @@ class NVConfiguration(ItemAttribute):
             (if excluded, must have delta parameter)
         """
 
-        assert np.sum(np.array([delta, nsweep_points]) > 0) == 1, 'Either delta and nsweep_points are required, but not both'
+        #assert np.sum(np.array([delta, nsweep_points]) > 0) == 1, 'Either delta and nsweep_points are required, but not both'
 
         assert unit in [
             'fMHz', 'fGHz', 'freg',
