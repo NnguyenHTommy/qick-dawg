@@ -15,7 +15,11 @@ class CPMGXY8nDelaySweepInBody(NVAveragerProgram):
         "nsweep_points",
         "relax_delay_treg",
         "reps",
-        "n_cpmg"]
+        "n_cpmg",
+        "pmod_out_pin",
+        "pmod_out_pulse_width_treg",
+        "pmod_out_trig_delay_treg",
+        "trigger_delay_treg",]
 
     def initialize(self):
         # Get registers for mw
@@ -67,6 +71,9 @@ class CPMGXY8nDelaySweepInBody(NVAveragerProgram):
         self.synci(100)  # give processor some time to configure pulses
 
     def body(self):
+        self.sync_all(self.cfg.trigger_delay_treg)
+        self.trigger(pins = [self.cfg.pmod_out_pin], width = self.cfg.pmod_out_pulse_width_treg)
+        self.sync_all(self.cfg.pmod_out_trig_delay_treg)
 
         self.set_pulse_registers(ch=self.cfg.mw_channel, phase=self.deg2reg(0))
         ## Pulse Sequence 1

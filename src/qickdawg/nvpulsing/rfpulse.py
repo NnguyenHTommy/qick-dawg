@@ -1,13 +1,3 @@
-'''
-RFTest
-=======================================================================
-RF Test class used to program sequences to evaluate the RFSoC RF Power
-and Rise times.
-'''
-
-
-
-
 from qick.averager_program import QickSweep
 from .nvaverageprogram import NVAveragerProgram
 from itemattribute import ItemAttribute
@@ -22,9 +12,6 @@ import os
 
 
 class RFPulse(NVAveragerProgram):
-   '''
-   An NVAveragerProgram class that generates RF gain and frequency stepping sequences.
-   '''
    required_cfg = [
        "pulse_len_treg",
        "relax_delay_treg",
@@ -33,7 +20,10 @@ class RFPulse(NVAveragerProgram):
        "reps",
        "init_delay_treg",
        "gain",
-       "num_pulses"]
+       "num_pulses",
+       "pmod_out_pin",
+       "pmod_out_pulse_width_treg",
+       "pmod_out_trig_delay_treg"]
   
    def initialize(self):
        # NVConfiguration class does not have Gain units unlike freq, time, or phase
@@ -51,14 +41,15 @@ class RFPulse(NVAveragerProgram):
        self.set_pulse_registers(ch=self.cfg.mw_channel,
                                     phase=0)
 
-       self.synci(500)  # give processor some time to configure pulses
-
-
+       self.synci(100)  # give processor some time to configure pulses
 
 
    def body(self):
+        self.trigger(pins = [self.cfg.pmod_out_pin], width = self.cfg.pmod_out_pulse_width_treg)
+        self.sync_all(self.cfg.pmod_out_trig_delay_treg)
        # Pulse MW channel
-       for rep in range(self.cfg.num_pulses):
+        for rep in range(self.cfg.num_pulses):
+           
            self.set_pulse_registers(ch=self.cfg.mw_channel, phase=self.deg2reg(0))
            self.pulse(ch=self.cfg.mw_channel) 
            self.sync_all(self.cfg.relax_delay_treg)
@@ -66,3 +57,5 @@ class RFPulse(NVAveragerProgram):
            self.pulse(ch=self.cfg.mw_channel)
            self.sync_all(self.cfg.relax_delay_treg) 
 
+
+         
