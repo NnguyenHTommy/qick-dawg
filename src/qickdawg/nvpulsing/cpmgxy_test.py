@@ -2,7 +2,7 @@ from .nvaverageprogram import NVAveragerProgram
 from .nvqicksweep import NVQickSweep
 
 
-class CPMGXY8nDelaySweepInBody(NVAveragerProgram):
+class CPMGXY8nDelaySweepInBodyTest(NVAveragerProgram):
 
     required_cfg = [
         "mw_channel",
