@@ -58,4 +58,3 @@ class CWODMR(NVAveragerProgram):
         self.sync_all(self.cfg.pmod_out_trig_delay_treg)
         self.pulse(ch=self.cfg.mw_channel)
         self.sync_all(self.cfg.pulse_seq_delay_treg)
-        #self.trigger(pins = [self.cfg.pmod_out_pin], width = self.cfg.pmod_out_pulse_width_treg)

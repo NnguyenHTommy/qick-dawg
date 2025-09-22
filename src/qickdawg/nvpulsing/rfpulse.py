@@ -17,6 +17,8 @@ class RFPulse(NVAveragerProgram):
        "relax_delay_treg",
        "mw_channel",
        "mw_nqz",
+       "mw_freg",
+       "mw_off_freg",
        "reps",
        "init_delay_treg",
        "gain",
@@ -34,11 +36,12 @@ class RFPulse(NVAveragerProgram):
 
        self.default_pulse_registers(ch=self.cfg.mw_channel,
                                         style='const',
-                                        freq=self.cfg.mw_freg,
+                                        
                                         length=self.cfg.pulse_len_treg,
                                         gain=self.cfg.gain)
 
        self.set_pulse_registers(ch=self.cfg.mw_channel,
+                                freq=self.cfg.mw_freg,
                                     phase=0)
 
        self.synci(100)  # give processor some time to configure pulses
@@ -49,11 +52,10 @@ class RFPulse(NVAveragerProgram):
         self.sync_all(self.cfg.pmod_out_trig_delay_treg)
        # Pulse MW channel
         for rep in range(self.cfg.num_pulses):
-           
-           self.set_pulse_registers(ch=self.cfg.mw_channel, phase=self.deg2reg(0))
+           self.set_pulse_registers(ch=self.cfg.mw_channel, phase=self.deg2reg(0), freq=self.cfg.mw_freg)
            self.pulse(ch=self.cfg.mw_channel) 
            self.sync_all(self.cfg.relax_delay_treg)
-           self.set_pulse_registers(ch=self.cfg.mw_channel, phase=self.deg2reg(90))
+           self.set_pulse_registers(ch=self.cfg.mw_channel, phase=self.deg2reg(90), freq=self.cfg.mw_off_freg)
            self.pulse(ch=self.cfg.mw_channel)
            self.sync_all(self.cfg.relax_delay_treg) 
 
