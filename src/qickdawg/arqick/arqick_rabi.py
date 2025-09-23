@@ -8,7 +8,6 @@ class Rabi(NVAveragerProgram):
     required_cfg = [
         "mw_channel",
         "mw_nqz",
-        "counting_duration_treg", 
         "mw_gain",
         "freq_freg",
         "mw_duration_start_treg", # units of freg are Mhz

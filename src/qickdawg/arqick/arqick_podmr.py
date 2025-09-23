@@ -8,7 +8,6 @@ class PODMR(NVAveragerProgram):
     required_cfg = [
         "mw_channel",
         "mw_nqz",
-        "counting_duration_treg", 
         "mw_gain",
         "mw_duration_treg",
         "freq_start_freg", # units of freg are Mhz
