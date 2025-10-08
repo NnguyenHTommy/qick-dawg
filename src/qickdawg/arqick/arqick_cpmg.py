@@ -70,14 +70,14 @@ class CPMG(NVAveragerProgram):
         self.sync_all(self.cfg.inherent_trigger_to_pulses_delay_treg)
         self.trigger(pins = [self.cfg.pmod_out_pin], width = self.cfg.pmod_out_pulse_width_treg)
         self.sync_all(self.cfg.pmod_out_trig_delay_treg)
-        self.set_pulse_registers(ch=self.cfg.mw_channel, phase=self.deg2reg(0))
+        self.set_pulse_registers(ch=self.cfg.mw_channel, phase=self.deg2reg(90))
         self.pulse(ch=self.cfg.mw_channel)
         self.sync_all()
 
         self.n_cpmg_register.reset()            
         self.label("LOOP_ncpmg{}".format(0))  
         self.sync(self.delay_register.page, self.delay_register.addr)
-        self.set_pulse_registers(ch=self.cfg.mw_channel, phase=self.deg2reg(0))
+        self.set_pulse_registers(ch=self.cfg.mw_channel, phase=self.deg2reg(90))
         self.pulse(ch=self.cfg.mw_channel)
         self.pulse(ch=self.cfg.mw_channel)
         self.sync_all()
@@ -87,6 +87,6 @@ class CPMG(NVAveragerProgram):
                 self.n_cpmg_register.addr,
                 'LOOP_ncpmg{}'.format(0))
         
-        self.set_pulse_registers(ch=self.cfg.mw_channel, phase=self.deg2reg(0))
+        self.set_pulse_registers(ch=self.cfg.mw_channel, phase=self.deg2reg(-90))
         self.pulse(ch=self.cfg.mw_channel)
         self.sync_all(self.cfg.pulse_seq_delay_treg)
