@@ -42,7 +42,7 @@ class CWODMR(NVAveragerProgram):
 
         # Make frequency register and convert frequency values to integers
         self.mw_frequency_register = self.get_gen_reg(self.cfg.mw_channel, "freq")
-        # # # note this is different from NVQickSweep
+        # # # note this is different from NVQickSweep d
         self.add_sweep(QickSweep(self,
                                  self.mw_frequency_register,
                                  self.cfg.freq_start_fMHz,
