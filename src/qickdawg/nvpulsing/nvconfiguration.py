@@ -233,9 +233,9 @@ class NVConfiguration(ItemAttribute):
         if (delta != 0) & (nsweep_points == 0):
             self[delta_name] = delta        
             self.nsweep_points = int(floor((stop - start) / delta + 1))
-            self[end_name] = (start + delta * self.nsweep_points)
+            self[end_name] = (start + delta * (self.nsweep_points - 1))
 
-        elif (delta == 0) & (nsweep_points == 0):
+        elif (delta == 0) & (nsweep_points != 0):
             self.nsweep_points = nsweep_points
             self[delta_name] = int(floor((stop - start) / (nsweep_points - 1)))
             self[end_name] = (start + delta * self.nsweep_points)
