@@ -102,8 +102,6 @@ class RFTest_CPMG(NVAveragerProgram):
             s + 45,
             10))
         
-       
-
         # CPMG waveform
         self.synci(200)  # give processor some time to configure pulses
 
