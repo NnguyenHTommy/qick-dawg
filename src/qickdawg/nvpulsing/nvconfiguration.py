@@ -219,6 +219,7 @@ class NVConfiguration(ItemAttribute):
                 print(f'Requested {start} to {stop} by {delta}')
             print(f'Instead using {actual_start} to {actual_end} by {actual_delta} in {self.nsweep_points} steps')
 
+    # the stop is inclusive for delta not equal to 0
     def add_unitless_linear_sweep(self, name, start, stop, delta=0, nsweep_points=0):
 
         for var in [start, stop, delta]:
@@ -240,7 +241,8 @@ class NVConfiguration(ItemAttribute):
             self[delta_name] = int(floor((stop - start) / (nsweep_points - 1)))
             self[end_name] = (start + delta * self.nsweep_points)
 
-        if (self[start_name] + self[delta_name] * self.nsweep_points) != stop:
+        if np.any([self[start_name] != start, self[end_name] != stop,
+                   (self[delta_name] != delta) & (delta != 0)]):
             print('Warning: exact sweep condition not possible\n')
             if delta == 0:
                 print(f'Requested {start} to {stop} in {nsweep_points}')

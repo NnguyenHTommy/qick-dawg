@@ -13,9 +13,11 @@ class RFTest_CPMG(NVAveragerProgram):
     An NVAveragerProgram class that generates RF gain and frequency stepping sequences.
     '''
     required_cfg = [        
-        "mw_pi2_samples", # length of pi/2 pulse
-        "tau_len_samples", # length of tau delay
-        "freq_freg", # Microwave freq # ~1405 MHz per Tommy
+        "mw_pi2_tdds", # length of pi/2 pulse
+        "delay_tdds_start",
+        "delay_tdds_end",
+        "nsweep_points",
+        "freq_freg", # Microwave freq 
         "n_cpmg", # number of cpmgxy8 rounds
         "mw_channel", # MW Channel
         "mw_nqz", # 1 at 1405 MHz
@@ -32,24 +34,21 @@ class RFTest_CPMG(NVAveragerProgram):
         # NVConfiguration class does not have Gain units unlike freq, time, or phase
         self.check_cfg()
 
-        # check for min tau length has to be greater than some ns
-        #maybe put a limit on gain later
-
         # Get mw registers
         self.declare_gen(ch=self.cfg.mw_channel, nqz=self.cfg.mw_nqz)
 
-        # Configure the waveforms for different sample offsets
-        # Waveforms must have at least a length of 3 treg
-        self.pi_len_samples = self.cfg.mw_pi2_samples * 2
-        self.pi_waveform_len_treg = max(int(np.ceil((self.pi_len_samples + 15) / 16)), 3)
-        self.half_pi_waveform_len_treg = max(int(np.ceil((self.cfg.mw_pi2_samples + 15) / 16)), 3)
+        # Configure the waveforms for different fine resolution delay steps
+        # must be 16 of them for pi and pi/2 pulses. Need to do all if sweeping at this fine resolution
+        self.pi_len_tdds = self.cfg.mw_pi2_tdds * 2
+        self.pi_waveform_len_treg = max(int(np.ceil((self.pi_len_tdds + 15) / 16)), 3) # Waveforms must have at least a length of 3 treg
+        self.half_pi_waveform_len_treg = max(int(np.ceil((self.cfg.mw_pi2_tdds + 15) / 16)), 3)
 
         for i in range(16):
-            # half pi
+            # pi/2 pulse
             i_data = np.zeros(self.half_pi_waveform_len_treg * 16)
             q_data = np.zeros(self.half_pi_waveform_len_treg * 16)
-            i_data[i : i + self.cfg.mw_pi2_samples] = 1
-            q_data[i : i + self.cfg.mw_pi2_samples] = 1
+            i_data[i : i + self.cfg.mw_pi2_tdds] = 1
+            q_data[i : i + self.cfg.mw_pi2_tdds] = 1
             i_data *= self.soccfg.get_maxv(self.cfg.mw_channel)
             q_data *= self.soccfg.get_maxv(self.cfg.mw_channel)
             self.add_envelope(ch=self.cfg.mw_channel, name=f"half_pi_{i}", idata=i_data, qdata=q_data)
@@ -57,26 +56,25 @@ class RFTest_CPMG(NVAveragerProgram):
             # pi pulse
             i_data = np.zeros(self.pi_waveform_len_treg * 16)
             q_data = np.zeros(self.pi_waveform_len_treg * 16)
-            i_data[i: i + self.pi_len_samples] = 1
-            q_data[i: i + self.pi_len_samples] = 1
+            i_data[i: i + self.pi_len_tdds] = 1
+            q_data[i: i + self.pi_len_tdds] = 1
             i_data *= self.soccfg.get_maxv(self.cfg.mw_channel)
             q_data *= self.soccfg.get_maxv(self.cfg.mw_channel)
             self.add_envelope(ch=self.cfg.mw_channel, name=f"pi_{i}", idata=i_data, qdata=q_data)
 
-        # Compute how much delay is in the waveforms
-        self.pi_len_unused = self.pi_waveform_len_treg*16 - self.pi_len_samples
-        self.half_pi_len_unused = self.half_pi_waveform_len_treg*16 - self.cfg.mw_pi2_samples
+        # there is dead time in the waveforms due to the waveform length being in treg units
+        # need to account for this in delays so need the values 
+        self.pi_len_unused_tdds = self.pi_waveform_len_treg*16 - self.pi_len_tdds
+        self.half_pi_len_unused_tdds = self.half_pi_waveform_len_treg*16 - self.cfg.mw_pi2_tdds
 
-        # Set up registers for storing tau treg and sample offsets
-        self.tau_samples = self.new_gen_reg(self.cfg.mw_channel,
-                                            name='tau_step',
-                                            init_val=self.cfg.tau_len_samples - self.pi_len_unused)
-        
-        # we can initialize sample_offset to already account for the first half_pi_pulse
-        self.sample_offset = self.new_gen_reg(self.cfg.mw_channel,
-                                                    name='sample_offset',
-                                                    init_val=(self.pi_len_unused-self.half_pi_len_unused))
-        self.treg_offset = self.new_gen_reg(self.cfg.mw_channel,
+        # two registers needed to account for unused time for a half pi pulse and pi pulse
+        # one for coarse adjustment (treg_offset) and one for fine adjustment (tdds_offset)
+        # we can initialize tdds_offset to already account for the first half_pi_pulse
+        self.tdds_offset_register = self.new_gen_reg(self.cfg.mw_channel,
+                                                    name='tdds_offset',
+                                                    init_val=(self.pi_len_unused_tdds-self.half_pi_len_unused_tdds))
+
+        self.treg_offset_register = self.new_gen_reg(self.cfg.mw_channel,
                                                 name='treg_offset',
                                                 init_val=0)
         
@@ -85,35 +83,39 @@ class RFTest_CPMG(NVAveragerProgram):
                                                     name='ncpmg',
                                                     init_val=self.cfg.n_cpmg - 1)
         
-        # comparison register
-        self.comparison = self.new_gen_reg(self.cfg.mw_channel,
+        # comparison register for binary search tree waveform selection
+        self.comparison_register = self.new_gen_reg(self.cfg.mw_channel,
                                                     name='comparison_val',
                                                     init_val=0)
         
+        # mw pulse register
         self.default_pulse_registers(ch=self.cfg.mw_channel,
                                      style='arb',
                                      freq=self.cfg.freq_freg,
                                      gain=self.cfg.mw_gain)
-        s = self.cfg.tau_len_samples - self.pi_len_unused
+        
+        # Set up register for storing and sweeping delays
+        self.delay_register = self.new_gen_reg(self.cfg.mw_channel,
+                                            name='delay',
+                                            init_val=self.cfg.delay_tdds_start - self.pi_len_unused_tdds)
+        
         self.add_sweep(NVQickSweep(
             self, 
-            self.tau_samples,
-            s,
-            s + 45,
-            10))
-        
-        # CPMG waveform
-        self.synci(200)  # give processor some time to configure pulses
+            self.delay_register,
+            self.cfg.delay_tdds_start - self.pi_len_unused_tdds,
+            self.cfg.delay_tdds_end - self.pi_len_unused_tdds, #end time 
+            self.cfg.nsweep_points)) # nsweep points
 
+        self.synci(200)  # give processor some time to configure pulses
 
     def body(self):
         # Set first half pi x
         self.set_pulse_registers(ch=self.cfg.mw_channel, waveform="half_pi_0", phase=0)
-        self.offset_computations() # offset comp is for the very next sync but the one after pulse
+        self.offset_computations() # offset comp is for the very next sync and the next set_waveform
         self.pulse(ch=self.cfg.mw_channel)
         self.sync_all()
 
-        self.sync(self.treg_offset.page, self.treg_offset.addr)
+        self.sync(self.treg_offset_register.page, self.treg_offset_register.addr)
 
         # Loop pi-X, tau, pi-Y, tau
         self.n_cpmg_register.reset()
@@ -126,14 +128,14 @@ class RFTest_CPMG(NVAveragerProgram):
         self.pulse(ch=self.cfg.mw_channel)
         self.sync_all()
 
-        self.sync(self.treg_offset.page, self.treg_offset.addr)
+        self.sync(self.treg_offset_register.page, self.treg_offset_register.addr)
 
         # Y pulse
         self.set_waveform("Execute_Y_Pi_Pulse", "pi_", phase=90)
         self.offset_computations()
         self.pulse(ch=self.cfg.mw_channel)
         self.sync_all()
-        self.sync(self.treg_offset.page, self.treg_offset.addr)
+        self.sync(self.treg_offset_register.page, self.treg_offset_register.addr)
 
         self.loopnz(
                 self.n_cpmg_register.page,
@@ -145,43 +147,61 @@ class RFTest_CPMG(NVAveragerProgram):
         self.pulse(ch=self.cfg.mw_channel)
         self.sync_all()
 
-        self.sample_offset.reset() # reset the sample_offset adjustment 
+        self.tdds_offset_register.reset() # reset the dds_offset adjustment
         self.sync_all(self.cfg.pulse_seq_delay_treg)
   
     def set_waveform(self, label, pulse_type="pi_", phase=0):
         """
         Configures the assembly code necessary for setting the waveform
         """
-        self.select_waveform(4, 8, 16, label, pulse_type, phase)
-        self.label(label)
+        self.select_waveform(4, 8, 16, label, pulse_type, phase) # enter binary tree
+        self.label(label) # branch back to here after selecting waveform
     
     def offset_computations(self):
         """
-        Compute the sample_offset and treg_offset for the next pulse
+        Compute the offset for the next pulse. 
+        Computes: 
+        1. wait till the start of the next pulse (from the end of the previous waveform) (in sample timing resolution 200ps)
+        2. Amount of wait done on the FPGA (converting to treg, ie dividing by 16 and taking the floor) so >> 4 in bits
+        3. Amount of wait done in waveform (samples),   equal to: (previous offset + the step in samples) % 16 so &15 in bits
+
+        Tau_samples is a misnomer, instead it is:
+            Actual Tau (samples) - Pi Pulse Waveform unused (samples)
+            $$$ This is done to account for the delay in the pi pulse waveform itself
         """
-        # sample_offset = sample_offset + sample_step
-        self.math(self.sample_offset.page, self.sample_offset.addr, self.sample_offset.addr, "+", self.tau_samples.addr)
-        # treg_offset = sample_offset >> 4 (global offset)
-        self.mathi(self.sample_offset.page, self.treg_offset.addr, self.sample_offset.addr, ">>", 4)
-        # sample_offset = sample_offset & 15
-        self.mathi(self.sample_offset.page, self.sample_offset.addr, self.sample_offset.addr, "&", 15)
+        # Computes the total delay needed until the next pulse from the end of this waveform
+        # by adding amount of samples to wait + current sample offset
+        self.math(self.tdds_offset_register.page, self.tdds_offset_register.addr, self.tdds_offset_register.addr, "+", self.delay_register.addr)
+        # Computes how long to stall the FPGA output in tproc cycles from the total delay.
+        # This operation also converts from samples (200ps) to treg (3.2ns)
+        self.mathi(self.tdds_offset_register.page, self.treg_offset_register.addr, self.tdds_offset_register.addr, ">>", 4)
+        # Computes the remaining samples that the pulse should be delayed by
+        # This is equivalent to: total delay (in samples) - fpga delay (in samples)
+        self.mathi(self.tdds_offset_register.page, self.tdds_offset_register.addr, self.tdds_offset_register.addr, "&", 15)
 
     def select_waveform(self, depth, center, span, label, pulse_type="pi_", phase=0):
         """
-        A binary search tree to select the correct waveform for a given sample_offset
+        A binary search tree to select the correct waveform for a given dds_offset
         """
         center = int(center)
-        if (depth==0):
+        if (depth==0): # once at the lowest level of the binary tree (only one matches all conditions)
+            # Set pulse register (exact waveform & phase)
+            # Optionally phase could be selected for elsewhere (either via NCO, or setting up 2 waveforms)
             self.set_pulse_registers(ch=self.cfg.mw_channel, waveform=f"{pulse_type}{center}", phase=self.deg2reg(phase))
-            self.condj(self.sample_offset.page, self.sample_offset.addr, "==", self.sample_offset.addr, label)
+            # Branch to exit binary tree and rejoin sequence
+            self.condj(self.tdds_offset_register.page, self.tdds_offset_register.addr, "==", self.tdds_offset_register.addr, label)
             return
-
-        self.regwi(self.comparison.page, self.comparison.addr, center)
+        
+        # QICK's only branch instruction is a conditional branch where you compare two registers
+        # Only 16 registers per page, and only same page registers can be compared
+        # We set the comparison register to an immediate (preset integer value)
+        # based on what condition we want to evaluate at this node of the binary tree
+        self.regwi(self.comparison_register.page, self.comparison_register.addr, center)
         self.condj(
-                self.sample_offset.page,
-                self.sample_offset.addr,
+                self.tdds_offset_register.page,
+                self.tdds_offset_register.addr,
                 ">=",
-                self.comparison.addr,
+                self.comparison_register.addr,
                 f"{pulse_type}{phase}_pulse_offset_{center}")
         
         self.select_waveform(depth-1, center-span/4, span/2, label, pulse_type, phase)
