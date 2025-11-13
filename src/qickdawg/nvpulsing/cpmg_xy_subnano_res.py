@@ -109,46 +109,30 @@ class RFTest_CPMG(NVAveragerProgram):
         self.synci(200)  # give processor some time to configure pulses
 
     def body(self):
-        # Set first half pi x
-        self.set_pulse_registers(ch=self.cfg.mw_channel, waveform="half_pi_0", phase=0)
-        self.offset_computations() # offset comp is for the very next sync and the next set_waveform
+        self.set_pulse_registers(ch=self.cfg.mw_channel, waveform="half_pi_0", phase=90)
         self.pulse(ch=self.cfg.mw_channel)
         self.sync_all()
 
-        self.sync(self.treg_offset_register.page, self.treg_offset_register.addr)
-
-        # Loop pi-X, tau, pi-Y, tau
+        # Loop tau-pi-tau
         self.n_cpmg_register.reset()
         self.label("LOOP_ncpmg")
-        
-        # X pulse
-        # Configures assembly code for picking the waveform
-        self.set_waveform("Execute_X_Pi_Pulse", "pi_", phase=0)
-        self.offset_computations()
-        self.pulse(ch=self.cfg.mw_channel)
-        self.sync_all()
-
-        self.sync(self.treg_offset_register.page, self.treg_offset_register.addr)
-
-        # Y pulse
-        self.set_waveform("Execute_Y_Pi_Pulse", "pi_", phase=90)
-        self.offset_computations()
-        self.pulse(ch=self.cfg.mw_channel)
-        self.sync_all()
-        self.sync(self.treg_offset_register.page, self.treg_offset_register.addr)
-
+        for i, phase in enumerate([0, 90, 0, 90, 90, 0, 90, 0]):
+            self.offset_computations() # offset comp is for the very next sync and the next set_waveform
+            self.sync(self.treg_offset_register.page, self.treg_offset_register.addr)
+            self.set_waveform(f"Execute_{i}_Pi_Pulse", "pi_", phase=phase)
+            self.pulse(ch=self.cfg.mw_channel)
+            self.sync_all()
+            self.offset_computations()
+            self.sync(self.treg_offset_register.page, self.treg_offset_register.addr)
         self.loopnz(
                 self.n_cpmg_register.page,
                 self.n_cpmg_register.addr,
                 'LOOP_ncpmg')
         
-        # Pi/2 X pulse
-        self.set_waveform("Execute_Last_Pulse", "half_pi_", phase=0)
+        self.set_waveform("Execute_Last_Pulse", "half_pi_", phase=-90)
         self.pulse(ch=self.cfg.mw_channel)
-        self.sync_all()
-
-        self.tdds_offset_register.reset() # reset the dds_offset adjustment
         self.sync_all(self.cfg.pulse_seq_delay_treg)
+        self.tdds_offset_register.reset() # reset the dds_offset adjustment
   
     def set_waveform(self, label, pulse_type="pi_", phase=0):
         """
@@ -202,9 +186,9 @@ class RFTest_CPMG(NVAveragerProgram):
                 self.tdds_offset_register.addr,
                 ">=",
                 self.comparison_register.addr,
-                f"{pulse_type}{phase}_pulse_offset_{center}")
+                f"{pulse_type}{phase}_pulse_offset_{center}_{label}")
         
         self.select_waveform(depth-1, center-span/4, span/2, label, pulse_type, phase)
 
-        self.label(f"{pulse_type}{phase}_pulse_offset_{center}")
+        self.label(f"{pulse_type}{phase}_pulse_offset_{center}_{label}")
         self.select_waveform(depth-1, center+span/4, span/2, label, pulse_type, phase)
