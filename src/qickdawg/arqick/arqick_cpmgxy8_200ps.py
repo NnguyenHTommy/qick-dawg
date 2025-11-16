@@ -109,11 +109,6 @@ class CPMGXY8FineRes(NVAveragerProgram):
         self.delay_register = self.new_gen_reg(self.cfg.mw_channel,
                                             name='delay',
                                             init_val=self.cfg.delay_tdds_start - self.pi_len_unused_tdds)
-
-        # Set up a delay factor register needed for scaling between 1*tau and 2*tau mainly for the last pi/2 pulse
-        self.delay_factor_register = self.new_gen_reg(self.cfg.mw_channel,
-                                                    name='delay_factor',
-                                                    init_val=1) 
         
         self.add_sweep(NVQickSweep(
             self, 
@@ -126,7 +121,7 @@ class CPMGXY8FineRes(NVAveragerProgram):
 
     def body(self):
         self.tdds_offset_register.reset() # reset the dds_offset adjustment
-
+        self.tdds_offset_register.set_to(self.tdds_offset_register, '-', self.delay_register) # need this for tau delay first pi/2
         self.set_pulse_registers(ch=self.cfg.mw_channel, waveform="half_pi_0", phase=90)
         self.pulse(ch=self.cfg.mw_channel)
         self.sync_all()
@@ -158,7 +153,6 @@ class CPMGXY8FineRes(NVAveragerProgram):
                 'LOOP_ncpmg')
         
         # last tau and pi/2 pulse of -Y
-        self.delay_factor_register.reset()  # set delay factor to 1 for 1*tau
         self.set_pulse_registers(ch=self.cfg.mw_channel, waveform="half_pi_0", phase=-90)
         self.offset_computations(last_pi2=True) # compute offsets and set waveform and phase
         self.sync(self.treg_offset_register.page, self.treg_offset_register.addr)
@@ -177,14 +171,12 @@ class CPMGXY8FineRes(NVAveragerProgram):
             None
         """
 
-        # Computes the total delay needed until the next pulse from the end of this waveform
-        # by adding amount of samples to wait + current sample offset
-        self.delay_factor_register.set_to(self.delay_register, '*', self.delay_factor_register)
-        self.tdds_offset_register.set_to(self.delay_factor_register, '+', self.tdds_offset_register)
+        # adjust tdds_offset based on whether last pi/2 pulse or regular 2*tau delay
         if last_pi2:
-            self.delay_factor_register.set_to(1)  # set delay factor to 1 for 1*tau
+            self.tdds_offset_register.set_to(self.tdds_offset_register, '+', self.delay_register)
         else:
-            self.delay_factor_register.set_to(2)  # set delay factor to 2 for 2*tau
+            self.tdds_offset_register.set_to(self.tdds_offset_register, '+', self.delay_register)
+            self.tdds_offset_register.set_to(self.tdds_offset_register, '+', self.delay_register)
         # Computes how long to stall the FPGA output in tproc cycles from the total delay.
         self.bitwi(self.tdds_offset_register.page, self.treg_offset_register.addr, self.tdds_offset_register.addr, ">>", int(np.log2(self.samps_per_clk)))
         # Computes the remaining samples that the pulse should be delayed by
