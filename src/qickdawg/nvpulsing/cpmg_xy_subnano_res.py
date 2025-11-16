@@ -1,7 +1,8 @@
 '''
-RFTest CPMG-XY
+CPMG XY8 sub-nanosecond resolution pulsing program
 =======================================================================
-RFTest Envelope class used to test the shape of RF envelopes.
+Min resolution of 200ps for delay steps between pulses in CPMG XY8 sequence
+using fine control of waveform start address and phase.
 '''
 
 from qickdawg.nvpulsing.nvaverageprogram import NVAveragerProgram
@@ -10,7 +11,7 @@ import numpy as np
 
 class CPMGXY8FineRes(NVAveragerProgram):
     '''
-    An NVAveragerProgram class that generates RF gain and frequency stepping sequences.
+    CPMG XY8 sub-nanosecond resolution pulsing program
     '''
     required_cfg = [        
         "mw_pi2_tdds", # length of pi/2 pulse
@@ -37,6 +38,7 @@ class CPMGXY8FineRes(NVAveragerProgram):
         self.declare_gen(ch=self.cfg.mw_channel, nqz=self.cfg.mw_nqz)
 
         # Get samps per clk for later calculations. should be 16 for mw with current version 11/14/2025
+        # if this changes from 16 then need to change waveform generation part
         self.samps_per_clk = self.soccfg['gens'][self.cfg.mw_channel]['samps_per_clk']
 
         # Configure the waveforms for different fine resolution delay steps
@@ -64,12 +66,12 @@ class CPMGXY8FineRes(NVAveragerProgram):
             i_data *= self.soccfg.get_maxv(self.cfg.mw_channel)
             q_data *= self.soccfg.get_maxv(self.cfg.mw_channel)
             self.add_envelope(ch=self.cfg.mw_channel, name=f"pi_{i}", idata=i_data, qdata=q_data)
-        #print(self.envelopes[self.cfg.mw_channel]['envs'])
-        # default special register but need to manually modify them later
+
+        # default special registers but need to manually modify them later
         self.address_register = self.get_gen_reg(self.cfg.mw_channel, name='addr') # for specifying which waveform
         self.phase_register = self.get_gen_reg(self.cfg.mw_channel, name='phase') # for specifying phase
 
-        # there is dead time in the waveforms due to the waveform length being in treg units
+        # there is dead time in the waveforms due to the waveform length being in treg units and using dds units
         # need to account for this in delays so need the values 
         self.pi_len_unused_tdds = self.pi_waveform_len_treg*self.samps_per_clk - self.pi_len_tdds
         self.half_pi_len_unused_tdds = self.half_pi_waveform_len_treg*self.samps_per_clk - self.cfg.mw_pi2_tdds
@@ -108,7 +110,7 @@ class CPMGXY8FineRes(NVAveragerProgram):
                                             name='delay',
                                             init_val=self.cfg.delay_tdds_start - self.pi_len_unused_tdds)
 
-        # Set up a delay factor register if needed for scaling between 1*tau and 2*tau
+        # Set up a delay factor register needed for scaling between 1*tau and 2*tau mainly for the last pi/2 pulse
         self.delay_factor_register = self.new_gen_reg(self.cfg.mw_channel,
                                                     name='delay_factor',
                                                     init_val=1) 
@@ -117,13 +119,14 @@ class CPMGXY8FineRes(NVAveragerProgram):
             self, 
             self.delay_register,
             self.cfg.delay_tdds_start - self.pi_len_unused_tdds,
-            self.cfg.delay_tdds_end - self.pi_len_unused_tdds, #end time 
-            self.cfg.nsweep_points)) # nsweep points
+            self.cfg.delay_tdds_end - self.pi_len_unused_tdds,
+            self.cfg.nsweep_points))
         
         self.synci(200)  # give processor some time to configure pulses
 
     def body(self):
         self.tdds_offset_register.reset() # reset the dds_offset adjustment
+
         self.set_pulse_registers(ch=self.cfg.mw_channel, waveform="half_pi_0", phase=90)
         self.pulse(ch=self.cfg.mw_channel)
         self.sync_all()
@@ -135,10 +138,13 @@ class CPMGXY8FineRes(NVAveragerProgram):
         # loop phase sequence
         self.phase_sequence_register.reset()
         self.label("LOOP_phase_sequence")
-        self.set_pulse_registers(ch=self.cfg.mw_channel, waveform="pi_0", phase=0)
 
+        # need to do set_pulse_registers and offset computations before each pulse
+        self.set_pulse_registers(ch=self.cfg.mw_channel, waveform="pi_0", phase=0)
         self.offset_computations(last_pi2=False) # compute offsets and set waveform and phase
+        # delay 2*tau
         self.sync(self.treg_offset_register.page, self.treg_offset_register.addr)
+        # pulse and sync all needs to be done after each pulse to get time cursor right
         self.pulse(ch=self.cfg.mw_channel)
         self.sync_all()
 
@@ -160,6 +166,17 @@ class CPMGXY8FineRes(NVAveragerProgram):
         self.sync_all(self.cfg.pulse_seq_delay_treg)
     
     def offset_computations(self, last_pi2 = False):
+        """
+        Method that computes the correct waveform address and phase for the current delay setting
+        as well as computes the correct delay to apply based on the unused time in the waveforms
+        and whether its a 1*tau or 2*tau delay.
+        1*tau is used for the last pi/2 pulse and 2*tau for all other pulses.
+        Args:
+            last_pi2 (bool): whether the current pulse is the last pi/2 pulse in the sequence
+        Returns:
+            None
+        """
+
         # Computes the total delay needed until the next pulse from the end of this waveform
         # by adding amount of samples to wait + current sample offset
         self.delay_factor_register.set_to(self.delay_register, '*', self.delay_factor_register)
@@ -169,10 +186,8 @@ class CPMGXY8FineRes(NVAveragerProgram):
         else:
             self.delay_factor_register.set_to(2)  # set delay factor to 2 for 2*tau
         # Computes how long to stall the FPGA output in tproc cycles from the total delay.
-        # This operation also converts from samples (200ps) to treg (3.2ns)
         self.bitwi(self.tdds_offset_register.page, self.treg_offset_register.addr, self.tdds_offset_register.addr, ">>", int(np.log2(self.samps_per_clk)))
         # Computes the remaining samples that the pulse should be delayed by
-        # This is equivalent to: total delay (in samples) - fpga delay (in samples)
         self.bitwi(self.tdds_offset_register.page, self.tdds_offset_register.addr, self.tdds_offset_register.addr, "&", self.samps_per_clk - 1)
 
         # updating address register to select correct waveform based on the current offset
