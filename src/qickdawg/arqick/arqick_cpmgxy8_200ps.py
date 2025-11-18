@@ -93,8 +93,8 @@ class CPMGXY8FineRes(NVAveragerProgram):
                                                     init_val=self.cfg.n_cpmg - 1)
         
         # phase sequence loop register
-        # Sequence is XYXYYXYX -> 0b10100101 = 165. Here did X to be 1 since sequence starts with X.
-        self.phase_sequence_string_int = int("10100101", 2)
+        # Sequence is XYXYYXYX -> 0b01011010 = 90. Here did X to be 0 since sequence starts with X.
+        self.phase_sequence_string_int = int("01011010", 2)
         self.phase_sequence_register = self.new_gen_reg(self.cfg.mw_channel,
                                             name='phase_sequence',
                                             init_val=7)
@@ -113,8 +113,8 @@ class CPMGXY8FineRes(NVAveragerProgram):
         self.add_sweep(NVQickSweep(
             self, 
             self.delay_register,
-            self.cfg.delay_tdds_start - self.pi_len_unused_tdds,
-            self.cfg.delay_tdds_end - self.pi_len_unused_tdds,
+            self.cfg.delay_tdds_start,
+            self.cfg.delay_tdds_end,
             self.cfg.nsweep_points))
         
         self.synci(200)  # give processor some time to configure pulses
@@ -123,23 +123,22 @@ class CPMGXY8FineRes(NVAveragerProgram):
         self.sync_all(self.cfg.inherent_trigger_to_pulses_delay_treg)
         self.trigger(pins = [self.cfg.pmod_out_pin], width = self.cfg.pmod_out_pulse_width_treg)
         self.sync_all(self.cfg.pmod_out_trig_delay_treg)
+
         self.tdds_offset_register.reset() # reset the dds_offset adjustment
         self.tdds_offset_register.set_to(self.tdds_offset_register, '-', self.delay_register) # need this for tau delay first pi/2
         self.set_pulse_registers(ch=self.cfg.mw_channel, waveform="half_pi_0", phase=90)
         self.pulse(ch=self.cfg.mw_channel)
         self.sync_all()
 
-        # Loop n_cpmg times
+        # need to do set_pulse_registers before changing length of pulse
+        self.set_pulse_registers(ch=self.cfg.mw_channel, waveform="pi_0", phase=0)
+
         self.n_cpmg_register.reset()
         self.label("LOOP_ncpmg")
-
-        # loop phase sequence
         self.phase_sequence_register.reset()
         self.label("LOOP_phase_sequence")
 
-        # need to do set_pulse_registers and offset computations before each pulse
-        self.set_pulse_registers(ch=self.cfg.mw_channel, waveform="pi_0", phase=0)
-        self.offset_computations(last_pi2=False) # compute offsets and set waveform and phase
+        self.offset_computations(last_pi2=False) # compute offsets and set waveform address and phase
         # delay 2*tau
         self.sync(self.treg_offset_register.page, self.treg_offset_register.addr)
         # pulse and sync all needs to be done after each pulse to get time cursor right
@@ -157,7 +156,7 @@ class CPMGXY8FineRes(NVAveragerProgram):
         
         # last tau and pi/2 pulse of -Y
         self.set_pulse_registers(ch=self.cfg.mw_channel, waveform="half_pi_0", phase=-90)
-        self.offset_computations(last_pi2=True) # compute offsets and set waveform and phase
+        self.offset_computations(last_pi2=True) # compute offsets and set waveform address and phase
         self.sync(self.treg_offset_register.page, self.treg_offset_register.addr)
         self.pulse(ch=self.cfg.mw_channel)
         self.sync_all(self.cfg.pulse_seq_delay_treg)
@@ -180,6 +179,7 @@ class CPMGXY8FineRes(NVAveragerProgram):
         else:
             self.tdds_offset_register.set_to(self.tdds_offset_register, '+', self.delay_register)
             self.tdds_offset_register.set_to(self.tdds_offset_register, '+', self.delay_register)
+        self.tdds_offset_register.set_to(self.tdds_offset_register, '-', self.pi_len_unused_tdds)
         # Computes how long to stall the FPGA output in tproc cycles from the total delay.
         self.bitwi(self.tdds_offset_register.page, self.treg_offset_register.addr, self.tdds_offset_register.addr, ">>", int(np.log2(self.samps_per_clk)))
         # Computes the remaining samples that the pulse should be delayed by
@@ -187,12 +187,10 @@ class CPMGXY8FineRes(NVAveragerProgram):
 
         # updating address register to select correct waveform based on the current offset
         self.address_register.set_to(self.tdds_offset_register, '*', self.pi_waveform_len_treg+self.half_pi_waveform_len_treg, physical_unit = False)
-        if last_pi2:
-            self.phase_register.set_to(-90, physical_unit=True) # set last pi/2 pulse to -Y
-        else:
+        if not last_pi2:
             self.address_register.set_to(self.address_register, '+', self.half_pi_waveform_len_treg, physical_unit = False)
 
-            # setting the phase. We do this in binary where X is 1 and Y is 0 so XYXYYXYX = 0b10100101
+            # setting the phase. We do this in binary where X is 0 and Y is 1 so XYXYYXYX = 0b01011010
             self.phase_register.set_to(self.phase_sequence_string_int, physical_unit=False)
             self.bitw(self.phase_register.page, self.phase_register.addr, self.phase_register.addr, ">>", self.phase_sequence_register.addr)
             self.bitwi(self.phase_register.page, self.phase_register.addr, self.phase_register.addr, "&", 1)
