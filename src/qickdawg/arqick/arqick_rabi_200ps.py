@@ -35,12 +35,13 @@ class RabiFineRes(NVAveragerProgram):
         # Get mw registers
         self.declare_gen(ch=self.cfg.mw_channel, nqz=self.cfg.mw_nqz)
 
-        # Get samps per clk for later calculations. should be 16 for mw with current version 11/14/2025
+        # Get samps per clk for later calculations. should be 16 for mw with current version rfsoc 11/14/2025
         # if this changes from 16 then need to change waveform generation part
         self.samps_per_clk = self.soccfg['gens'][self.cfg.mw_channel]['samps_per_clk']
         # Configure the waveforms for different fine resolution pulse steps
-        # Waveforms must have at least a length of 3 treg units but want multiple of 2 so 64 = 2^6 for 16 samps per clk
-        self.mw_pulse_waveform_len_tdds = 4 * self.samps_per_clk  # in tdds units
+        # Waveforms must have at least a length of 3 treg units but want multiple of 2 so use 4 so 4*16= 64 = 2^6 for 16 samps per clk
+        self.mw_pulse_waveform_len_treg = 4
+        self.mw_pulse_waveform_len_tdds = self.mw_pulse_waveform_len_treg * self.samps_per_clk  # in tdds units
         
         for i in np.arange(0, self.mw_pulse_waveform_len_tdds+1, 1):
             i_data = np.zeros(self.mw_pulse_waveform_len_tdds)
@@ -78,7 +79,7 @@ class RabiFineRes(NVAveragerProgram):
                                    reg=self.mw_duration_register,
                                    start=self.cfg.mw_duration_tdds_start,
                                    stop=self.cfg.mw_duration_tdds_end,
-                                   num=self.cfg.nsweep_points))
+                                   expts=self.cfg.nsweep_points))
 
         self.synci(200)  # give processor some time to configure pulses
 
@@ -87,24 +88,25 @@ class RabiFineRes(NVAveragerProgram):
         self.trigger(pins = [self.cfg.pmod_out_pin], width = self.cfg.pmod_out_pulse_width_treg)
         self.sync_all(self.cfg.pmod_out_trig_delay_treg)
 
-
-        self.set_pulse_registers(ch=self.cfg.mw_channel, waveform=f"pulse_{self.mw_pulse_waveform_len_tdds}")
-        # set coarse and fine registers based on duration
+        # set coarse and fine registers based on duration. coarse is x//64 and then multiply by 4 to get treg units
         self.bitwi(self.coarse_mw_register.page, self.coarse_mw_register.addr, self.mw_duration_register.addr, ">>", int(np.log2(self.mw_pulse_waveform_len_tdds)))
-        # if not 0 subtract 1 but if 0 then jump after the coarse loop
-        self.coarse_mw_register.set_to(self.coarse_mw_register, "-", 1, physical_unit=False) 
+        self.bitwi(self.coarse_mw_register.page, self.coarse_mw_register.addr, self.coarse_mw_register.addr, "<<", int(np.log2(self.mw_pulse_waveform_len_treg)))
         self.bitwi(self.fine_mw_register.page, self.fine_mw_register.addr, self.mw_duration_register.addr, "&", self.mw_pulse_waveform_len_tdds - 1)
-
         
-        self.label("LOOP_COARSE")
-        self.pulse(ch=self.cfg.mw_channel)
-        self.loopnz(
-                self.coarse_mw_register.page,
-                self.coarse_mw_register.addr,
-                "LOOP_COARSE")
+        # if there is no coarse part just do fine part
+        self.condj(self.coarse_mw_register.page, self.coarse_mw_register.addr, "==", 0, "JUMP_NO_COARSE")
 
-        self.set_pulse_registers(ch=self.cfg.mw_channel, waveform="pulse_16")
+        # since using sync all (and need to use it for accurate timing), it will always play a pulse so need to subtract onewaveform length
+        self.coarse_mw_register.set_to(self.coarse_mw_register, "-", self.mw_pulse_waveform_len_treg, physical_unit=False)
+        self.set_pulse_registers(ch=self.cfg.mw_channel, waveform=f"pulse_{self.mw_pulse_waveform_len_tdds}", mode = "periodic")
+        self.pulse(ch=self.cfg.mw_channel) 
+        self.sync_all()
+        self.sync(self.coarse_mw_register.page, self.coarse_mw_register.addr)
+
+        self.label("JUMP_NO_COARSE")
+        self.set_pulse_registers(ch=self.cfg.mw_channel, waveform=f"pulse_{0}", mode = "oneshot")
+        self.address_register.set_to(self.fine_mw_register, '*', self.mw_pulse_waveform_len_treg, physical_unit = False)
         self.pulse(ch=self.cfg.mw_channel)
         self.sync_all(self.cfg.pulse_seq_delay_treg)
-    
+
     
