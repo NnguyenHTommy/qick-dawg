@@ -95,6 +95,8 @@ class CPMGXY8FineRes(NVAveragerProgram):
         # phase sequence loop register
         # Sequence is XYXYYXYX -> 0b01011010 = 90. Here did X to be 0 since sequence starts with X.
         self.phase_sequence_string_int = int("01011010", 2)
+        print(self.phase_sequence_string_int)
+        
         self.phase_sequence_register = self.new_gen_reg(self.cfg.mw_channel,
                                             name='phase_sequence',
                                             init_val=7)
@@ -126,12 +128,12 @@ class CPMGXY8FineRes(NVAveragerProgram):
 
         self.tdds_offset_register.reset() # reset the dds_offset adjustment
         self.tdds_offset_register.set_to(self.tdds_offset_register, '-', self.delay_register) # need this for tau delay first pi/2
-        self.set_pulse_registers(ch=self.cfg.mw_channel, waveform="half_pi_0", phase=90)
+        self.set_pulse_registers(ch=self.cfg.mw_channel, waveform="half_pi_0", phase=self.deg2reg(90))
         self.pulse(ch=self.cfg.mw_channel)
         self.sync_all()
 
         # need to do set_pulse_registers before changing length of pulse
-        self.set_pulse_registers(ch=self.cfg.mw_channel, waveform="pi_0", phase=0)
+        self.set_pulse_registers(ch=self.cfg.mw_channel, waveform="pi_0", phase=self.deg2reg(0))
 
         self.n_cpmg_register.reset()
         self.label("LOOP_ncpmg")
@@ -155,7 +157,7 @@ class CPMGXY8FineRes(NVAveragerProgram):
                 'LOOP_ncpmg')
         
         # last tau and pi/2 pulse of -Y
-        self.set_pulse_registers(ch=self.cfg.mw_channel, waveform="half_pi_0", phase=-90)
+        self.set_pulse_registers(ch=self.cfg.mw_channel, waveform="half_pi_0", phase=self.deg2reg(-90))
         self.offset_computations(last_pi2=True) # compute offsets and set waveform address and phase
         self.sync(self.treg_offset_register.page, self.treg_offset_register.addr)
         self.pulse(ch=self.cfg.mw_channel)
@@ -194,4 +196,11 @@ class CPMGXY8FineRes(NVAveragerProgram):
             self.phase_register.set_to(self.phase_sequence_string_int, physical_unit=False)
             self.bitw(self.phase_register.page, self.phase_register.addr, self.phase_register.addr, ">>", self.phase_sequence_register.addr)
             self.bitwi(self.phase_register.page, self.phase_register.addr, self.phase_register.addr, "&", 1)
-            self.phase_register.set_to(self.phase_register, '*', 90, physical_unit=True) # set phase to 0 or 90 based on LSB
+
+            # multiplication doesn't work so have to jump based on phase bit
+            self.condj(self.phase_register.page, self.phase_register.addr, "==", 0, "JUMP_PHASE_X")
+            self.phase_register.set_to(90, physical_unit=True) 
+            self.condj(self.phase_register.page, self.phase_register.addr, "==", self.phase_register.addr, "JUMP_END_PHASE")
+            self.label("JUMP_PHASE_X")
+            self.phase_register.set_to(0, physical_unit=True)
+            self.label("JUMP_END_PHASE")
