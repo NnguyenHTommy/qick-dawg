@@ -196,11 +196,4 @@ class CPMGXY8FineRes(NVAveragerProgram):
             self.phase_register.set_to(self.phase_sequence_string_int, physical_unit=False)
             self.bitw(self.phase_register.page, self.phase_register.addr, self.phase_register.addr, ">>", self.phase_sequence_register.addr)
             self.bitwi(self.phase_register.page, self.phase_register.addr, self.phase_register.addr, "&", 1)
-
-            # multiplication doesn't work so have to jump based on phase bit
-            self.condj(self.phase_register.page, self.phase_register.addr, "==", 0, "JUMP_PHASE_X")
-            self.phase_register.set_to(90, physical_unit=True) 
-            self.condj(self.phase_register.page, self.phase_register.addr, "==", self.phase_register.addr, "JUMP_END_PHASE")
-            self.label("JUMP_PHASE_X")
-            self.phase_register.set_to(0, physical_unit=True)
-            self.label("JUMP_END_PHASE")
+            self.bitwi(self.phase_register.page, self.phase_register.addr, self.phase_register.addr, "<<", 30)
