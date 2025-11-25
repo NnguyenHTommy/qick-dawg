@@ -95,7 +95,6 @@ class CPMGXY8FineRes(NVAveragerProgram):
         # phase sequence loop register
         # Sequence is XYXYYXYX -> 0b01011010 = 90. Here did X to be 0 since sequence starts with X.
         self.phase_sequence_string_int = int("01011010", 2)
-        print(self.phase_sequence_string_int)
         
         self.phase_sequence_register = self.new_gen_reg(self.cfg.mw_channel,
                                             name='phase_sequence',
