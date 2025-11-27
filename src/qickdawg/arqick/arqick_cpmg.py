@@ -49,8 +49,6 @@ class CPMG(NVAveragerProgram):
                                                name='delay', 
                                                init_val=self.cfg.delay_start_treg)
 
-        self.mw_time_register = self.get_gen_reg(self.cfg.mw_channel, 
-                                                 name='t') # idk why this is needed. should check this later
 
         self.n_cpmg_register = self.new_gen_reg(
             self.cfg.mw_channel,
