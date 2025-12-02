@@ -1,5 +1,5 @@
 '''
-Counting duration optimization sub-nanosecond resolution pulsing program
+Bootstrap 2 sub-nanosecond resolution pulsing program
 =======================================================================
 Min resolution of 200ps for delay steps 
 using fine control of waveform start address and phase.
@@ -8,13 +8,14 @@ using fine control of waveform start address and phase.
 from qickdawg.nvpulsing.nvaverageprogram import NVAveragerProgram
 import numpy as np
 
-class CountingDurationFineRes(NVAveragerProgram):
+class Bootstrap2FineRes(NVAveragerProgram):
     '''
-    Counting duration optimization sub-nanosecond resolution pulsing program
+    Bootstrap sub-nanosecond resolution pulsing program. Pi/2-Y
     '''
     required_cfg = [        
-        "mw_duration_tdds", # length of mw
+        "mw_pi2_tdds", # length of mw
         "freq_freg", # Microwave freq 
+        "n_cpmg", # number of cpmgxy8 rounds
         "mw_channel", # MW Channel
         "mw_nqz", # 1 at 1405 MHz
         "mw_gain", # MW Gain
@@ -37,13 +38,13 @@ class CountingDurationFineRes(NVAveragerProgram):
         self.samps_per_clk = self.soccfg['gens'][self.cfg.mw_channel]['samps_per_clk']
         # Configure the waveforms for different fine resolution pulse steps
         # Waveforms must have at least a length of 3 treg units 
-        self.mw_pulse_waveform_len_treg = max(int(np.ceil(self.cfg.mw_duration_tdds / self.samps_per_clk)), 3)
+        self.mw_pulse_waveform_len_treg = max(int(np.ceil(self.cfg.mw_pi2_tdds / self.samps_per_clk)), 3)
         self.mw_pulse_waveform_len_tdds = self.mw_pulse_waveform_len_treg * self.samps_per_clk  # in tdds units
         
         i_data = np.zeros(self.mw_pulse_waveform_len_tdds)
         q_data = np.zeros(self.mw_pulse_waveform_len_tdds)
-        i_data[:self.cfg.mw_duration_tdds] = 1
-        q_data[:self.cfg.mw_duration_tdds] = 1
+        i_data[:self.cfg.mw_pi2_tdds] = 1
+        q_data[:self.cfg.mw_pi2_tdds] = -1
         i_data *= self.soccfg.get_maxv(self.cfg.mw_channel)
         q_data *= self.soccfg.get_maxv(self.cfg.mw_channel)
         self.add_envelope(ch=self.cfg.mw_channel, name="pulse", idata=i_data, qdata=q_data)
