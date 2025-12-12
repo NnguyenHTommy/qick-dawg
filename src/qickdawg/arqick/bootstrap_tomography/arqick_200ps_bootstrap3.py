@@ -8,12 +8,13 @@ using fine control of waveform start address and phase.
 from qickdawg.nvpulsing.nvaverageprogram import NVAveragerProgram
 import numpy as np
 
-class Bootstrap2FineRes(NVAveragerProgram):
+class Bootstrap3FineRes(NVAveragerProgram):
     '''
-    Bootstrap sub-nanosecond resolution pulsing program. Pi/2-Y
+    Bootstrap sub-nanosecond resolution pulsing program. Pi/2-X - Pi-X
     '''
     required_cfg = [        
         "mw_pi2_tdds", # length of mw
+        "btwn_mw_delay_tdds", # delay between mw pulses
         "freq_freg", # Microwave freq 
         "mw_channel", # MW Channel
         "mw_nqz", # 1 at 1405 MHz

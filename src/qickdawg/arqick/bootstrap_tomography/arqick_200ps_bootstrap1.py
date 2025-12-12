@@ -15,7 +15,6 @@ class Bootstrap1FineRes(NVAveragerProgram):
     required_cfg = [        
         "mw_pi2_tdds", # length of mw
         "freq_freg", # Microwave freq 
-        "n_cpmg", # number of cpmgxy8 rounds
         "mw_channel", # MW Channel
         "mw_nqz", # 1 at 1405 MHz
         "mw_gain", # MW Gain

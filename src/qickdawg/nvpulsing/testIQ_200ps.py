@@ -7,7 +7,6 @@ Min resolution of 200ps for steps between pulses
 
 from qickdawg.nvpulsing.nvaverageprogram import NVAveragerProgram
 import numpy as np
-import sys
 
 class MWPulseIQtest(NVAveragerProgram):
     '''
@@ -42,10 +41,10 @@ class MWPulseIQtest(NVAveragerProgram):
         self.mw_pulse_sequence_len_tdds = 4*(self.cfg.mw_duration_tdds + self.cfg.btwn_mw_delay_tdds)
         if np.floor(self.mw_pulse_sequence_len_tdds) < 3:
             print("Error: total pulse sequence length is less than 3 treg units. Increase mw duration or delay between pulses")
-            sys.exit()
+            raise ValueError
         if self.mw_pulse_sequence_len_tdds % self.samps_per_clk != 0:
             print("Error: total pulse sequence length is not a multiple of samps per clk. Adjust mw duration or delay between pulses")
-            sys.exit()
+            raise ValueError
 
         # making the envelope for the pulse sequence which is X, Y, -X, -Y supposedly
         i_data = np.zeros(self.mw_pulse_sequence_len_tdds)
