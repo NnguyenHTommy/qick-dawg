@@ -18,6 +18,7 @@ class Bootstrap10(NVAveragerProgram):
         "pmod_out_pulse_width_treg", # 50ns is reasonable
         "pmod_out_trig_delay_treg", # delay between trigger and pulse seq start. this is added to the already 198 inherent ns delay so putting 300 means 198+300=498ns delay
         "inherent_trigger_to_pulses_delay_treg", # should be 209.27ns 
+        "phaseY",
         ]
 
     def initialize(self):
@@ -45,7 +46,7 @@ class Bootstrap10(NVAveragerProgram):
         self.sync_all(self.cfg.inherent_trigger_to_pulses_delay_treg)
         self.trigger(pins = [self.cfg.pmod_out_pin], width = self.cfg.pmod_out_pulse_width_treg)
         self.sync_all(self.cfg.pmod_out_trig_delay_treg)
-        self.set_pulse_registers(ch=self.cfg.mw_channel, phase=self.deg2reg(90))
+        self.set_pulse_registers(ch=self.cfg.mw_channel, phase=self.deg2reg(self.cfg.phaseY))
         self.pulse(ch=self.cfg.mw_channel)
         self.sync_all(self.cfg.mw_delay_treg)
         self.set_pulse_registers(ch=self.cfg.mw_channel, phase=self.deg2reg(0))
