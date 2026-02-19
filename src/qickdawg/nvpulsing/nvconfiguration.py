@@ -121,7 +121,6 @@ class NVConfiguration(ItemAttribute):
 
         elif name.split('_')[-1] == 'pdegrees':
             preg = self.soccfg.deg2reg(value)
-
             self.__dict__[name] = self.soccfg.reg2deg(preg)
             self.__dict__[name.replace('pdegrees', 'preg')] = preg
 
@@ -163,7 +162,7 @@ class NVConfiguration(ItemAttribute):
         assert unit in [
             'fMHz', 'fGHz', 'freg',
             'tus', 'tns', 'treg',
-            'pdeg', 'preg']
+            'pdegrees', 'preg']
         assert isinstance(nsweep_points, int)
         if 'reg' in unit:
             assert np.all([isinstance(var, int) for var in (start, stop, delta)]), \
