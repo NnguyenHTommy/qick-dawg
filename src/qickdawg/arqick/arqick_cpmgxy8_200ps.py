@@ -23,6 +23,7 @@ class CPMGXY8FineRes(NVAveragerProgram):
         "mw_channel", # MW Channel
         "mw_nqz", # 1 at 1405 MHz
         "mw_gain", # MW Gain
+        "scaling_mode", # 'linear' or 'exponential' spacing of delay points in sweep
         "reps",
         "pmod_out_pin", # should be 0 for PMOD0_0
         "pmod_out_pulse_width_treg", # 50ns is reasonable
@@ -109,14 +110,24 @@ class CPMGXY8FineRes(NVAveragerProgram):
         # Set up register for storing and sweeping delays
         self.delay_register = self.new_gen_reg(self.cfg.mw_channel,
                                             name='delay',
-                                            init_val=self.cfg.delay_tdds_start - self.pi_len_unused_tdds)
+                                            init_val=self.cfg.delay_tdds_start)
         
-        self.add_sweep(NVQickSweep(
-            self, 
-            self.delay_register,
-            self.cfg.delay_tdds_start,
-            self.cfg.delay_tdds_end,
-            self.cfg.nsweep_points))
+        if self.cfg.scaling_mode == 'exponential':
+            self.add_sweep(NVQickSweep(
+                self, 
+                self.delay_register,
+                self.cfg.delay_tdds_start,
+                self.cfg.delay_tdds_end,
+                self.cfg.nsweep_points,
+                scaling_mode=self.cfg.scaling_mode,
+                scaling_factor=self.cfg.scaling_factor))
+        else:
+            self.add_sweep(NVQickSweep(
+                self, 
+                self.delay_register,
+                self.cfg.delay_tdds_start,
+                self.cfg.delay_tdds_end,
+                self.cfg.nsweep_points))
         
         self.synci(200)  # give processor some time to configure pulses
 

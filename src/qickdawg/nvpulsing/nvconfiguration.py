@@ -284,3 +284,50 @@ class NVConfiguration(ItemAttribute):
         stop = self[name + '_end_treg']
 
         self.nsweep_points = len(int_exp_scale(start, stop, self.scaling_factor))
+
+    def add_unitless_exponential_sweep(self, name, start, stop, scaling_factor):
+        """
+        Configures exponentially scaling sweep properties for unitless parameters
+        changing parameter 'name' from 'start' to 'stop' by a scaling factor.
+
+        Parameters
+        -------------------------
+        name
+            A string which is attribute that is to be swept over
+        start
+            integer start value
+        stop
+            integer stop value
+        scaling_factor
+            string: '3/2', '5/4', '9/8', '17/16'
+        """
+
+        # enforce integer behavior (same as your unitless linear)
+        assert isinstance(start, int) and isinstance(stop, int), \
+            "Unitless exponential sweep requires integer start and stop"
+
+        assert scaling_factor in ['17/16', '9/8', '5/4', '3/2'], \
+            "Currently accepting only scaling values 17/16, 9/8, 5/4, 3/2"
+
+        self.scaling_mode = 'exponential'
+        self.scaling_factor = scaling_factor
+
+        start_name = name + '_start'
+        end_name = name + '_end'
+
+        # store requested values
+        self[start_name] = start
+        self[end_name] = stop
+
+        # generate actual sweep points
+        sweep_points = int_exp_scale(start, stop, scaling_factor)
+
+        self.nsweep_points = len(sweep_points)
+
+        # optional: store actual final value (since it overshoots)
+        actual_end = sweep_points[-1]
+
+        if actual_end != stop:
+            print('Warning: exact sweep condition not possible\n')
+            print(f'Requested {start} to {stop} with scaling {scaling_factor}')
+            print(f'Instead using {start} to {actual_end} in {self.nsweep_points} steps')
