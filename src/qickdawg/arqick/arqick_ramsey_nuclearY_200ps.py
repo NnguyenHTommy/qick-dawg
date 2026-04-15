@@ -1,10 +1,9 @@
 '''
-CPMG XY8 sub-nanosecond resolution pulsing program with to sweep N pulses
+Nuclear Ramsey pulsing program
 ===================================================================
-Min resolution of 200 ps for delay steps between pulses in a CPMG XY8
-phase sequence. Unlike round-based XY8 implementations, this version
-treats n_cpmg as the total number of pi pulses, so N can be any
-positive integer.
+Needs to have init, ramsey, then tomography
+https://www.nature.com/articles/nnano.2014.2#Sec2
+I think N needs to be steps of 4 in order for symmetry to make sense for phase? Need to look into this 
 '''
 
 from qickdawg.nvpulsing.nvaverageprogram import NVAveragerProgram
@@ -12,23 +11,18 @@ from qickdawg.nvpulsing.nvqicksweep import NVQickSweep
 import numpy as np
 
 
-class CPMGXY8SweepNFineRes(NVAveragerProgram):
+class NuclearRamseyFineResY(NVAveragerProgram):
     '''
-    CPMG XY8 sub-nanosecond resolution pulsing program where n_cpmg is the
-    total number of pi pulses (any positive integer).
-
-    Phase pattern repeats XYXYYXYX continuously, so:
-    - n_cpmg=3  -> XYX
-    - n_cpmg=10 -> XYXYYXYXXY
+    Nuclear Ramsey pulsing program with sub-nanosecond resolution for <Y> basis readout
     '''
 
     required_cfg = [
         "mw_pi2_tdds",  # length of pi/2 pulse
-        "n_cpmg_start",
-        "n_cpmg_end",
+        "n_cpmg_ramsey_start",
+        "n_cpmg_ramsey_end",
         "nsweep_points",
+        "delay_tdds_ramsey",
         "freq_freg",  # microwave freq
-        "delay_tdds",  # fixed interpulse delay
         "mw_channel",  # MW channel
         "mw_nqz",  # 1 at 1405 MHz
         "mw_gain",  # MW gain
@@ -38,15 +32,17 @@ class CPMGXY8SweepNFineRes(NVAveragerProgram):
         "pmod_out_trig_delay_treg",  # delay between trigger and pulse seq start
         "inherent_trigger_to_pulses_delay_treg",  # should be 209.27ns
         "pulse_seq_delay_treg",  # delay between sequence end and next trigger start
+
+        "delay_tdds_gate_crxpi2",
+        "n_cpmg_gate_crxpi2",
+        "delay_tdds_gate_rzpi2",
+        "n_cpmg_gate_rzpi2",
+        "reinit_tdds_time" # tricky to compute because want to init after the tau delay. will do this on artiq/client side
     ]
 
     def initialize(self):
         self.check_cfg()
-        if self.cfg.n_cpmg_start < 1:
-            raise ValueError("n_cpmg_start must be >= 1 for CPMG XY8 variable-N sequence.")
-        if self.cfg.n_cpmg_end < 1:
-            raise ValueError("n_cpmg_end must be >= 1 for CPMG XY8 variable-N sequence.")
-
+        
         # Get mw registers.
         self.declare_gen(ch=self.cfg.mw_channel, nqz=self.cfg.mw_nqz)
 
@@ -88,13 +84,12 @@ class CPMGXY8SweepNFineRes(NVAveragerProgram):
         # Account for waveform dead time due to treg granularity.
         self.pi_len_unused_tdds = self.pi_waveform_len_treg * self.samps_per_clk - self.pi_len_tdds
         self.half_pi_len_unused_tdds = self.half_pi_waveform_len_treg * self.samps_per_clk - self.cfg.mw_pi2_tdds
-        
 
         # Delay correction registers.
         self.tdds_offset_register = self.new_gen_reg(
             self.cfg.mw_channel,
             name='tdds_offset',
-            init_val=self.pi_len_unused_tdds - self.half_pi_len_unused_tdds,
+            init_val=0,
         )
         self.treg_offset_register = self.new_gen_reg(
             self.cfg.mw_channel,
@@ -109,11 +104,8 @@ class CPMGXY8SweepNFineRes(NVAveragerProgram):
             init_val=0,
         )
 
-        # Bit encoding X=0, Y=1 for XYXYYXYX over bits [0..7]. Have to read from the end of the string since bitwise operations shift towards LSB.
+        # Bit encoding X=0, Y=1 for XYXYYXYX over bits [0..7].
         self.phase_sequence_string_int = int("01011010", 2)
-        # want ending pi/2 pulse to be -90 for n pulses mod 8: 1,4,7,8 
-        self.end_phase_sequence_string_int = int("1101011101011111", 2) # 01 is 90 and 11 is -90 degrees for the final pi/2 pulse encoded in bits 
-        
 
         self.default_pulse_registers(
             ch=self.cfg.mw_channel,
@@ -126,21 +118,21 @@ class CPMGXY8SweepNFineRes(NVAveragerProgram):
         self.n_cpmg_register = self.new_gen_reg(
             self.cfg.mw_channel,
             name='ncpmg',
-            init_val=self.cfg.n_cpmg_start,
+            init_val=0,
         )
 
         self.n_cpmg_sweep_register = self.new_gen_reg(
             self.cfg.mw_channel,
             name='ncpmg_sweep',
-            init_val=self.cfg.n_cpmg_start,
+            init_val=self.cfg.n_cpmg_ramsey_start,
         )
 
         self.add_sweep(
             NVQickSweep(
                 self,
                 self.n_cpmg_sweep_register,
-                self.cfg.n_cpmg_start,
-                self.cfg.n_cpmg_end,
+                self.cfg.n_cpmg_ramsey_start,
+                self.cfg.n_cpmg_ramsey_end,
                 self.cfg.nsweep_points,
             )
         )
@@ -152,20 +144,80 @@ class CPMGXY8SweepNFineRes(NVAveragerProgram):
         self.trigger(pins=[self.cfg.pmod_out_pin], width=self.cfg.pmod_out_pulse_width_treg)
         self.sync_all(self.cfg.pmod_out_trig_delay_treg)
 
+        # reset things that need to be reset each sequence iteration
         self.tdds_offset_register.reset()
-        self.tdds_offset_register.set_to(self.tdds_offset_register, '-', self.cfg.delay_tdds)
+
+        # NUCLEAR SPIN INITIALIZATION 
+        # e RY(pi/2) 
         self.set_pulse_registers(ch=self.cfg.mw_channel, waveform="half_pi_0", phase=self.deg2reg(90))
         self.pulse(ch=self.cfg.mw_channel)
         self.sync_all()
 
-        # Set pi pulse waveform once; phase and address are updated per pulse.
-        self.set_pulse_registers(ch=self.cfg.mw_channel, waveform="pi_0", phase=self.deg2reg(0))
+        # e-n CROTX(pi/2)
+        self.cpmg_xy8_gate(gate_index=0, pi_2_pulse_before=True, delay_tau_tdds=self.cfg.delay_tdds_gate_crxpi2, n_cpmg_pulses=self.cfg.n_cpmg_gate_crxpi2)
 
-        self.n_cpmg_register.set_to(self.n_cpmg_sweep_register, '-', 1)
-        self.phase_step_register.reset()
-        self.label("LOOP_ncpmg")
+        # e RX(pi/2)
+        self.set_pulse_registers(ch=self.cfg.mw_channel, waveform="half_pi_0",phase=self.deg2reg(0))
+        self.offset_computations(after_pi2=True, delay_tau_tdds=self.cfg.delay_tdds_gate_crxpi2)
+        self.sync(self.treg_offset_register.page, self.treg_offset_register.addr)
+        self.pulse(ch=self.cfg.mw_channel)
+        self.sync_all()
 
-        self.offset_computations(last_pi2=False)
+        # n RZ(pi/2)
+        self.cpmg_xy8_gate(gate_index=1, pi_2_pulse_before=True, delay_tau_tdds=self.cfg.delay_tdds_gate_rzpi2, n_cpmg_pulses=self.cfg.n_cpmg_gate_rzpi2)
+
+        # e-n CROTX(pi/2)
+        self.tdds_offset_register.set_to(self.tdds_offset_register, '+', self.cfg.delay_tdds_gate_rzpi2 - self.cfg.delay_tdds_gate_crxpi2)
+        self.cpmg_xy8_gate(gate_index=2, pi_2_pulse_before=False, delay_tau_tdds=self.cfg.delay_tdds_gate_crxpi2, n_cpmg_pulses=self.cfg.n_cpmg_gate_crxpi2)
+
+        # would do self.tdds_offset_register.set_to(self.tdds_offset_register, '+', self.cfg.delay_tdds_gate_crxpi2 - self.cfg.delay_tdds_gate_crxpi2) but its 0 so can omit
+        self.tdds_offset_register.set_to(self.tdds_offset_register, '+', self.cfg.reinit_tdds_time)
+
+        # NUCLEAR SPIN RAMSEY SEQUENCE
+        # e-n CROTX(pi/2)
+        self.cpmg_xy8_gate(gate_index=3, pi_2_pulse_before=False, delay_tau_tdds=self.cfg.delay_tdds_gate_crxpi2, n_cpmg_pulses=self.cfg.n_cpmg_gate_crxpi2)
+
+        # n RZ(wt) for variable time
+        self.tdds_offset_register.set_to(self.tdds_offset_register, '+', self.cfg.delay_tdds_gate_crxpi2 - self.cfg.delay_tdds_ramsey)
+        self.cpmg_xy8_gate(gate_index=4, pi_2_pulse_before=False, delay_tau_tdds=self.cfg.delay_tdds_ramsey, n_cpmg_pulses=None, vary_n=True)
+
+        # TOMOGRAPHY <Y> basis 
+        # diverging from universal control paper to follow 10 qubit paper tomography since looks better and makes more sense
+
+        # n RZ(pi/2)
+        self.tdds_offset_register.set_to(self.tdds_offset_register, '+', self.cfg.delay_tdds_ramsey - self.cfg.delay_tdds_gate_rzpi2)
+        self.cpmg_xy8_gate(gate_index=5, pi_2_pulse_before=False, delay_tau_tdds=self.cfg.delay_tdds_gate_rzpi2, n_cpmg_pulses=self.cfg.n_cpmg_gate_rzpi2)
+
+        # e RY(pi/2)
+        self.set_pulse_registers(ch=self.cfg.mw_channel, waveform="half_pi_0",phase=self.deg2reg(90))
+        self.offset_computations(after_pi2=True, delay_tau_tdds=self.cfg.delay_tdds_ramsey)
+        self.sync(self.treg_offset_register.page, self.treg_offset_register.addr)
+        self.pulse(ch=self.cfg.mw_channel)
+        self.sync_all()
+
+        # e-n CROTX(pi/2)
+        self.cpmg_xy8_gate(gate_index=6, pi_2_pulse_before=True, delay_tau_tdds=self.cfg.delay_tdds_gate_crxpi2, n_cpmg_pulses=self.cfg.n_cpmg_gate_crxpi2)
+
+        # e RX(pi/2)
+        self.set_pulse_registers(ch=self.cfg.mw_channel, waveform="half_pi_0",phase=self.deg2reg(0))
+        self.offset_computations(after_pi2=True, delay_tau_tdds=self.cfg.delay_tdds_gate_crxpi2)
+        self.sync(self.treg_offset_register.page, self.treg_offset_register.addr)
+        self.pulse(ch=self.cfg.mw_channel)
+        self.sync_all(self.cfg.pulse_seq_delay_treg)
+
+    def cpmg_xy8_gate(self, gate_index, pi_2_pulse_before, delay_tau_tdds, n_cpmg_pulses, vary_n = False):
+        if pi_2_pulse_before:
+            self.tdds_offset_register.set_to(self.tdds_offset_register, '+', self.pi_len_unused_tdds - self.half_pi_len_unused_tdds)
+            self.tdds_offset_register.set_to(self.tdds_offset_register, '-', delay_tau_tdds) 
+            self.set_pulse_registers(ch=self.cfg.mw_channel, waveform="pi_0", phase=self.deg2reg(0))
+        
+        if vary_n:
+            self.n_cpmg_register.set_to(self.n_cpmg_sweep_register, '-', 1, physical_unit=False)
+        else:
+            self.n_cpmg_register.set_to(n_cpmg_pulses - 1, physical_unit=False)
+        self.phase_step_register.reset()  
+        self.label("LOOP_ncpmg"+str(gate_index)) # TODO: this might not work so check. also maybe more efficient way
+        self.offset_computations(after_pi2=False, delay_tau_tdds=delay_tau_tdds)
         self.sync(self.treg_offset_register.page, self.treg_offset_register.addr)
         self.pulse(ch=self.cfg.mw_channel)
         self.sync_all()
@@ -189,50 +241,20 @@ class CPMGXY8SweepNFineRes(NVAveragerProgram):
         self.loopnz(
             self.n_cpmg_register.page,
             self.n_cpmg_register.addr,
-            'LOOP_ncpmg',
+            'LOOP_ncpmg'+str(gate_index),
         )
 
-        # Final tau and readout pi/2 pulse.
-        self.set_pulse_registers(
-            ch=self.cfg.mw_channel,
-            waveform="half_pi_0",
-            phase=self.deg2reg(-90),
-        )
-        self.offset_computations(last_pi2=True)
-        self.sync(self.treg_offset_register.page, self.treg_offset_register.addr)
-        self.pulse(ch=self.cfg.mw_channel)
-        self.sync_all(self.cfg.pulse_seq_delay_treg)
 
-    def offset_computations(self, last_pi2=False):
+    def offset_computations(self, after_pi2=False, delay_tau_tdds=None):
         """
         Computes waveform address, phase, and coarse/fine delay correction.
-        Uses 1*tau delay for the final pi/2 pulse and 2*tau delay for pi pulses.
         """
-        self.tdds_offset_register.set_to(self.tdds_offset_register, '+', self.cfg.delay_tdds)
 
-        if not last_pi2:
-            self.tdds_offset_register.set_to(self.tdds_offset_register, '+', self.cfg.delay_tdds)
-        else:
-            # set the phase register for last pi/2 pulse based on N mod 8 to get correct final readout phase.
-            self.phase_register.set_to(self.end_phase_sequence_string_int, physical_unit=False)
-            self.bitwi(self.phase_step_register.page, self.phase_step_register.addr, self.n_cpmg_sweep_register, "&", 7)
-            self.bitwi(self.phase_step_register.page, self.phase_step_register.addr, self.phase_step_register.addr, "<<", 1) # multiply by 2
-            self.bitw(self.phase_register.page, self.phase_register.addr, self.phase_register.addr, ">>", self.phase_step_register.addr)
-            self.bitwi(
-                self.phase_register.page,
-                self.phase_register.addr,
-                self.phase_register.addr,
-                "&",
-                3,
-            ) # mod 4 to get the correct 2-bit phase for the final pi/2 pulse
-            self.bitwi(
-                self.phase_register.page,
-                self.phase_register.addr,
-                self.phase_register.addr,
-                "<<",
-                30,
-            )
-            
+        self.tdds_offset_register.set_to(self.tdds_offset_register, '+', delay_tau_tdds)
+
+        if not after_pi2:
+            self.tdds_offset_register.set_to(self.tdds_offset_register, '+', delay_tau_tdds)
+
         self.tdds_offset_register.set_to(self.tdds_offset_register, '-', self.pi_len_unused_tdds)
 
         # Coarse delay in treg units.
@@ -261,7 +283,7 @@ class CPMGXY8SweepNFineRes(NVAveragerProgram):
             physical_unit=False,
         )
 
-        if not last_pi2:
+        if not after_pi2:
             self.address_register.set_to(
                 self.address_register,
                 '+',
