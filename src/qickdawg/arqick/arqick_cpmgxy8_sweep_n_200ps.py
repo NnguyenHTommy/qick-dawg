@@ -11,7 +11,6 @@ from qickdawg.nvpulsing.nvaverageprogram import NVAveragerProgram
 from qickdawg.nvpulsing.nvqicksweep import NVQickSweep
 import numpy as np
 
-
 class CPMGXY8SweepNFineRes(NVAveragerProgram):
     '''
     CPMG XY8 sub-nanosecond resolution pulsing program where n_cpmg is the
@@ -216,9 +215,9 @@ class CPMGXY8SweepNFineRes(NVAveragerProgram):
         else:
             # set the phase register for last pi/2 pulse based on N mod 8 to get correct final readout phase.
             self.phase_register.set_to(self.end_phase_sequence_string_int, physical_unit=False)
-            self.bitwi(self.phase_step_register.page, self.phase_step_register.addr, self.n_cpmg_sweep_register, "&", 7)
-            self.bitwi(self.phase_step_register.page, self.phase_step_register.addr, self.phase_step_register.addr, "<<", 1) # multiply by 2
-            self.bitw(self.phase_register.page, self.phase_register.addr, self.phase_register.addr, ">>", self.phase_step_register.addr)
+            self.bitwi(self.phase_step_register.page, self.phase_step_register.addr, self.n_cpmg_sweep_register.addr, '&', 7)
+            self.bitwi(self.phase_step_register.page, self.phase_step_register.addr, self.phase_step_register.addr, "<<", 1,) # multiply by 2
+            self.bitw(self.phase_register.page, self.phase_register.addr, self.phase_register.addr, ">>", self.phase_step_register.addr,)
             self.bitwi(
                 self.phase_register.page,
                 self.phase_register.addr,
