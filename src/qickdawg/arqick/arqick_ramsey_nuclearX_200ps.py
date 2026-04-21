@@ -3,7 +3,6 @@ Nuclear Ramsey pulsing program
 ===================================================================
 Needs to have init, ramsey, then tomography
 https://www.nature.com/articles/nnano.2014.2#Sec2
-I think N needs to be steps of 4 in order for symmetry to make sense for phase? Need to look into this 
 '''
 
 from qickdawg.nvpulsing.nvaverageprogram import NVAveragerProgram
