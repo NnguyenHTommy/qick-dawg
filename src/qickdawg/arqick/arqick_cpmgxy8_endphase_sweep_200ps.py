@@ -3,6 +3,7 @@ CPMG XY8 sub-nanosecond resolution pulsing program with end phase sweep
 =======================================================================
 Min resolution of 200ps for delay steps between pulses in CPMG XY8 sequence
 using fine control of waveform start address and phase.
+TODO: UPDATE
 '''
 
 from qickdawg.nvpulsing.nvaverageprogram import NVAveragerProgram
