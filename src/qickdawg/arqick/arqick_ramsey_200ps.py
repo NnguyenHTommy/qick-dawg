@@ -42,7 +42,8 @@ class RamseyFineRes(NVAveragerProgram):
         # Configure the waveforms for different fine resolution delay steps
         # Waveforms must have at least a length of 3 treg units
         self.half_pi_waveform_len_treg = max(int(np.ceil((self.cfg.mw_pi2_tdds + self.samps_per_clk-1) / self.samps_per_clk)), 3)
-        
+        self.pi2_to_pi2_correction_tdds = self.cfg.mw_pi2_tdds
+
         for i in range(16):
             # pi/2 pulse
             i_data = np.zeros(self.half_pi_waveform_len_treg * self.samps_per_clk)
@@ -79,7 +80,7 @@ class RamseyFineRes(NVAveragerProgram):
         # Set up register for storing and sweeping delays
         self.delay_register = self.new_gen_reg(self.cfg.mw_channel,
                                             name='delay',
-                                            init_val=self.cfg.delay_tdds_start)
+                                            init_val=0)
         
         self.add_sweep(NVQickSweep(
             self, 
@@ -100,6 +101,7 @@ class RamseyFineRes(NVAveragerProgram):
         self.pulse(ch=self.cfg.mw_channel)
         self.sync_all()
 
+        self.set_pulse_registers(ch=self.cfg.mw_channel, waveform="half_pi_0", phase=self.deg2reg(180))
         self.offset_computations() # compute offsets and set waveform address and phase
         self.sync(self.treg_offset_register.page, self.treg_offset_register.addr)
         self.pulse(ch=self.cfg.mw_channel)
@@ -107,6 +109,8 @@ class RamseyFineRes(NVAveragerProgram):
     
     def offset_computations(self):
         self.tdds_offset_register.set_to(self.tdds_offset_register, '+', self.delay_register)
+        self.tdds_offset_register.set_to(self.tdds_offset_register, '-', self.pi2_to_pi2_correction_tdds)
+
         # Computes how long to stall the FPGA output in tproc cycles from the total delay.
         self.bitwi(self.tdds_offset_register.page, self.treg_offset_register.addr, self.tdds_offset_register.addr, ">>", int(np.log2(self.samps_per_clk)))
         # Computes the remaining samples that the pulse should be delayed by
