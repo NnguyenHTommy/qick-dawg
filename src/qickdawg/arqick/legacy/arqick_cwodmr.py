@@ -1,6 +1,5 @@
 from qickdawg.nvpulsing.nvaverageprogram import NVAveragerProgram
 from qickdawg.nvpulsing.nvqicksweep import NVQickSweep
-from qick.averager_program import QickSweep
 
 
 class CWODMR(NVAveragerProgram):
@@ -42,8 +41,7 @@ class CWODMR(NVAveragerProgram):
 
         # Make frequency register and convert frequency values to integers
         self.mw_frequency_register = self.get_gen_reg(self.cfg.mw_channel, "freq")
-        # # # note this is different from NVQickSweep d
-        self.add_sweep(QickSweep(self,
+        self.add_sweep(NVQickSweep(self,
                                  self.mw_frequency_register,
                                  self.cfg.freq_start_fMHz,
                                  self.cfg.freq_end_fMHz,

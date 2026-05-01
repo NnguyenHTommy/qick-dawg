@@ -63,7 +63,7 @@ class CorrelationC13(StandardOps, NVAveragerProgram):
 
         # NUCLEAR SPIN INITIALIZATION 
         # e RY(pi/2) 
-        self.set_pulse_registers(ch=self.cfg.mw_channel, waveform="half_pi_0", phase=self.deg2reg(90))
+        self.set_pulse_registers(ch=self.cfg.mw_channel, waveform="half_pi_0", freq=self.cfg.freq_freg, gain=self.cfg.mw_gain, phase=self.deg2reg(90))
         self.pulse(ch=self.cfg.mw_channel)
         self.sync_all()
 
@@ -71,7 +71,7 @@ class CorrelationC13(StandardOps, NVAveragerProgram):
         self.cpmg_xy8_gate(gate_index=0, pi_2_pulse_before=True, delay_tau_tdds=self.cfg.delay_tdds_gate_crxpi2, n_cpmg_pulses=self.cfg.n_cpmg_gate_crxpi2)
 
         # e RX(pi/2)
-        self.set_pulse_registers(ch=self.cfg.mw_channel, waveform="half_pi_0",phase=self.deg2reg(0))
+        self.set_pulse_registers(ch=self.cfg.mw_channel, waveform="half_pi_0", freq=self.cfg.freq_freg, gain=self.cfg.mw_gain, phase=self.deg2reg(0))
         self.offset_computations(pi2_after=True, delay_tau_tdds=self.cfg.delay_tdds_gate_crxpi2)
         self.sync(self.treg_offset_register.page, self.treg_offset_register.addr)
         self.pulse(ch=self.cfg.mw_channel)
@@ -81,7 +81,7 @@ class CorrelationC13(StandardOps, NVAveragerProgram):
         self.tdds_offset_register.set_to(self.tdds_offset_register, '+', self.delay_register)
         self.tdds_offset_register.set_to(self.tdds_offset_register, '+', self.pi_len_unused_tdds - self.half_pi_len_unused_tdds + self.pi_to_pi2_correction_tdds - self.pi2_to_pi2_correction_tdds)
         # e RY(pi/2)
-        self.set_pulse_registers(ch=self.cfg.mw_channel, waveform="half_pi_0",phase=self.deg2reg(90))
+        self.set_pulse_registers(ch=self.cfg.mw_channel, waveform="half_pi_0", freq=self.cfg.freq_freg, gain=self.cfg.mw_gain, phase=self.deg2reg(90))
         self.offset_computations(pi2_after=True, delay_tau_tdds=0)
         self.sync(self.treg_offset_register.page, self.treg_offset_register.addr)
         self.pulse(ch=self.cfg.mw_channel)
@@ -91,7 +91,7 @@ class CorrelationC13(StandardOps, NVAveragerProgram):
         self.cpmg_xy8_gate(gate_index=1, pi_2_pulse_before=True, delay_tau_tdds=self.cfg.delay_tdds_gate_crxpi2, n_cpmg_pulses=self.cfg.n_cpmg_gate_crxpi2)
 
         # e RX(pi/2)
-        self.set_pulse_registers(ch=self.cfg.mw_channel, waveform="half_pi_0",phase=self.deg2reg(180))
+        self.set_pulse_registers(ch=self.cfg.mw_channel, waveform="half_pi_0", freq=self.cfg.freq_freg, gain=self.cfg.mw_gain, phase=self.deg2reg(180))
         self.offset_computations(pi2_after=True, delay_tau_tdds=self.cfg.delay_tdds_gate_crxpi2)
         self.sync(self.treg_offset_register.page, self.treg_offset_register.addr)
         self.pulse(ch=self.cfg.mw_channel)

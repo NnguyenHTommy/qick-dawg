@@ -72,7 +72,7 @@ class CPMGXY8SweepNFineRes(StandardOps, NVAveragerProgram):
         self.pmod_trigger_sequence()
 
         self.tdds_offset_register.reset()
-        self.set_pulse_registers(ch=self.cfg.mw_channel, waveform="half_pi_0", phase=self.deg2reg(90))
+        self.set_pulse_registers(ch=self.cfg.mw_channel, waveform="half_pi_0", freq=self.cfg.freq_freg, gain=self.cfg.mw_gain, phase=self.deg2reg(90))
         self.pulse(ch=self.cfg.mw_channel)
         self.sync_all()
 
@@ -82,6 +82,8 @@ class CPMGXY8SweepNFineRes(StandardOps, NVAveragerProgram):
         self.set_pulse_registers(
             ch=self.cfg.mw_channel,
             waveform="half_pi_0",
+            freq=self.cfg.freq_freg,
+            gain=self.cfg.mw_gain,
             phase=self.deg2reg(-90),
         )
         self.offset_computations(pi2_after=True)

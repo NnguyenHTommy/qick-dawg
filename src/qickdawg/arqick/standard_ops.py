@@ -76,8 +76,6 @@ class StandardOps:
         self.default_pulse_registers(
             ch=self.cfg.mw_channel,
             style='arb',
-            freq=self.cfg.freq_freg,
-            gain=self.cfg.mw_gain,
         )
 
         # Main loop register: total number of pi pulses.
@@ -97,7 +95,7 @@ class StandardOps:
         if pi_2_pulse_before:
             self.tdds_offset_register.set_to(self.tdds_offset_register, '+', self.pi_len_unused_tdds - self.half_pi_len_unused_tdds - self.pi_to_pi2_correction_tdds + self.pi_to_pi_correction_tdds)
             self.tdds_offset_register.set_to(self.tdds_offset_register, '-', delay_tau_tdds) 
-            self.set_pulse_registers(ch=self.cfg.mw_channel, waveform="pi_0", phase=self.deg2reg(0))
+            self.set_pulse_registers(ch=self.cfg.mw_channel, waveform="pi_0", freq=self.cfg.freq_freg, gain=self.cfg.mw_gain, phase=self.deg2reg(0))
         
         if vary_n:
             self.n_cpmg_register.set_to(self.n_cpmg_sweep_register, '-', 1, physical_unit=False)

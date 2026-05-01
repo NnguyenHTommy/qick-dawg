@@ -87,14 +87,14 @@ class CPMGXY8AnyNFineRes(StandardOps, NVAveragerProgram):
         self.pmod_trigger_sequence()
 
         self.tdds_offset_register.reset()
-        self.set_pulse_registers(ch=self.cfg.mw_channel, waveform="half_pi_0", phase=self.deg2reg(90))
+        self.set_pulse_registers(ch=self.cfg.mw_channel, waveform="half_pi_0", freq=self.cfg.freq_freg, gain=self.cfg.mw_gain, phase=self.deg2reg(90))
         self.pulse(ch=self.cfg.mw_channel)
         self.sync_all()
 
         self.cpmg_xy8_gate(gate_index=0, pi_2_pulse_before=True, delay_tau_tdds=self.delay_register, n_cpmg_pulses=self.cfg.n_cpmg, vary_n=False)
 
         # Final tau and readout pi/2 pulse.
-        self.set_pulse_registers(ch=self.cfg.mw_channel, waveform="half_pi_0", phase=self.deg2reg(self.last_pi2_phase_deg))
+        self.set_pulse_registers(ch=self.cfg.mw_channel, waveform="half_pi_0", freq=self.cfg.freq_freg, gain=self.cfg.mw_gain, phase=self.deg2reg(self.last_pi2_phase_deg))
         self.offset_computations(pi2_after=True, delay_tau_tdds=self.delay_register)
         self.sync(self.treg_offset_register.page, self.treg_offset_register.addr)
         self.pulse(ch=self.cfg.mw_channel)

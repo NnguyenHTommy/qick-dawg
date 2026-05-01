@@ -67,7 +67,7 @@ class NuclearRamseyWaitFineResX(StandardOps, NVAveragerProgram):
 
         # NUCLEAR SPIN INITIALIZATION 
         # e RY(pi/2) 
-        self.set_pulse_registers(ch=self.cfg.mw_channel, waveform="half_pi_0", phase=self.deg2reg(90))
+        self.set_pulse_registers(ch=self.cfg.mw_channel, waveform="half_pi_0", freq=self.cfg.freq_freg, gain=self.cfg.mw_gain, phase=self.deg2reg(90))
         self.pulse(ch=self.cfg.mw_channel)
         self.sync_all()
 
@@ -75,7 +75,7 @@ class NuclearRamseyWaitFineResX(StandardOps, NVAveragerProgram):
         self.cpmg_xy8_gate(gate_index=0, pi_2_pulse_before=True, delay_tau_tdds=self.cfg.delay_tdds_gate_crxpi2, n_cpmg_pulses=self.cfg.n_cpmg_gate_crxpi2)
 
         # e RX(pi/2)
-        self.set_pulse_registers(ch=self.cfg.mw_channel, waveform="half_pi_0",phase=self.deg2reg(0))
+        self.set_pulse_registers(ch=self.cfg.mw_channel, waveform="half_pi_0", freq=self.cfg.freq_freg, gain=self.cfg.mw_gain, phase=self.deg2reg(0))
         self.offset_computations(pi2_after=True, delay_tau_tdds=self.cfg.delay_tdds_gate_crxpi2)
         self.sync(self.treg_offset_register.page, self.treg_offset_register.addr)
         self.pulse(ch=self.cfg.mw_channel)
@@ -102,7 +102,7 @@ class NuclearRamseyWaitFineResX(StandardOps, NVAveragerProgram):
         # diverging from universal control paper to follow 10 qubit paper tomography since looks better and makes more sense
 
         # e RY(pi/2)
-        self.set_pulse_registers(ch=self.cfg.mw_channel, waveform="half_pi_0",phase=self.deg2reg(90))
+        self.set_pulse_registers(ch=self.cfg.mw_channel, waveform="half_pi_0", freq=self.cfg.freq_freg, gain=self.cfg.mw_gain, phase=self.deg2reg(90))
         self.offset_computations(pi2_after=True, delay_tau_tdds=self.cfg.delay_tdds_ramsey)
         self.sync(self.treg_offset_register.page, self.treg_offset_register.addr)
         self.pulse(ch=self.cfg.mw_channel)
@@ -112,7 +112,7 @@ class NuclearRamseyWaitFineResX(StandardOps, NVAveragerProgram):
         self.cpmg_xy8_gate(gate_index=5, pi_2_pulse_before=True, delay_tau_tdds=self.cfg.delay_tdds_gate_crxpi2, n_cpmg_pulses=self.cfg.n_cpmg_gate_crxpi2)
 
         # e RX(pi/2)
-        self.set_pulse_registers(ch=self.cfg.mw_channel, waveform="half_pi_0",phase=self.deg2reg(0))
+        self.set_pulse_registers(ch=self.cfg.mw_channel, waveform="half_pi_0", freq=self.cfg.freq_freg, gain=self.cfg.mw_gain, phase=self.deg2reg(0))
         self.offset_computations(pi2_after=True, delay_tau_tdds=self.cfg.delay_tdds_gate_crxpi2)
         self.sync(self.treg_offset_register.page, self.treg_offset_register.addr)
         self.pulse(ch=self.cfg.mw_channel)
