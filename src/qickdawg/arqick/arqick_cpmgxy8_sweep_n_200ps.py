@@ -86,7 +86,7 @@ class CPMGXY8SweepNFineRes(StandardOps, NVAveragerProgram):
             gain=self.cfg.mw_gain,
             phase=self.deg2reg(-90),
         )
-        self.offset_computations(pi2_after=True)
+        self.offset_computations(pi2_after=True, delay_tau_tdds=self.cfg.delay_tdds)
         self.sync(self.treg_offset_register.page, self.treg_offset_register.addr)
         self.pulse(ch=self.cfg.mw_channel)
         self.sync_all(self.cfg.pulse_seq_delay_treg)
