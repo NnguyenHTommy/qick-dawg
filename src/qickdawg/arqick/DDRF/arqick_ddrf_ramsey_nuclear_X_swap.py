@@ -3,7 +3,6 @@ Ramsey nuclear X with reduced swap in beginning with DDRF
 '''
 
 from qickdawg.nvpulsing.nvaverageprogram import NVAveragerProgram
-from qickdawg.nvpulsing.nvqicksweep import NVQickSweep
 from qickdawg.arqick.standard_ops import StandardOps
 
 class RamseyNuclearXSwapDDRF(StandardOps, NVAveragerProgram):
@@ -24,9 +23,7 @@ class RamseyNuclearXSwapDDRF(StandardOps, NVAveragerProgram):
         "freq_freg",  # microwave freq
         "mw_pi2_tdds",  # length of pi/2 pulse
 
-        "delay_tdds_start",
-        "delay_tdds_end",
-        "nsweep_points",
+        "delay_tdds",
         "C13_measurement_delay_tdds",
         "delay_tdds_gate_crxpi2",
         "n_cpmg_gate_crxpi2",
@@ -34,24 +31,6 @@ class RamseyNuclearXSwapDDRF(StandardOps, NVAveragerProgram):
 
     def initialize(self):
         self.init()
-
-        self.delay_register = self.new_gen_reg(
-            self.cfg.mw_channel,
-            name='delay',
-            init_val=0,
-        )
-
-        self.add_sweep(
-            NVQickSweep(
-                self,
-                self.delay_register,
-                self.cfg.delay_tdds_start,
-                self.cfg.delay_tdds_end,
-                self.cfg.nsweep_points,
-            )
-        )
-        
-
         self.synci(200)  # give processor some time to configure pulses
 
     def body(self):
@@ -83,7 +62,7 @@ class RamseyNuclearXSwapDDRF(StandardOps, NVAveragerProgram):
         # e-n CROTX(pi/2)
         self.cpmg_xy8_gate(gate_index=2, pi_2_pulse_before=False, delay_tau_tdds=self.cfg.delay_tdds_gate_crxpi2, n_cpmg_pulses=self.cfg.n_cpmg_gate_crxpi2)
         # ramsey wait tau
-        self.tdds_offset_register.set_to(self.tdds_offset_register, '+', self.delay_register)
+        self.tdds_offset_register.set_to(self.tdds_offset_register, '+', self.cfg.delay_tdds)
 
        # e RY(pi/2)
         self.set_pulse_registers(ch=self.cfg.mw_channel, waveform="half_pi_0", freq=self.cfg.freq_freg, gain=self.cfg.mw_gain, phase=self.deg2reg(90))
