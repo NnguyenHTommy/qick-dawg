@@ -33,6 +33,7 @@ class RabiMbiFineRes(NVAveragerProgram):
         "readout_integration_treg",
         "delay_before_readout_repeats_treg",
         "delay_after_readout_window_to_mw_treg",
+        "delay_to_line_up_with_artiq_treg",
     ]
 
     def initialize(self):
@@ -94,48 +95,49 @@ class RabiMbiFineRes(NVAveragerProgram):
         self.synci(200)  # give processor some time to configure pulses
 
     def body(self):
-        self.mathi(0, 2, 2, "==", 0) 
-        # self.sync_all(self.cfg.inherent_trigger_to_pulses_delay_treg)
+        self.mathi(0, 2, 2, "==", 0)
+        self.sync_all(self.cfg.inherent_trigger_to_pulses_delay_treg)
         # self.trigger(pins=[self.cfg.pmod_out_pin], 
         #              width=self.cfg.pmod_out_pulse_width_treg)
         # self.sync_all(self.cfg.pmod_out_trig_delay_treg)
 
         self.label("wait_for_trigger")
-        self.sync_all(self.cfg.delay_before_readout_repeats_treg)
+        # self.sync_all(self.cfg.delay_before_readout_repeats_treg)
         self.trigger(pins=[self.cfg.pmod_out_pin], 
                      adcs=[self.cfg.adc_channel], 
                      width=self.cfg.readout_integration_treg)
         self.wait_all(200) # pause until 200 clocks past the end of the readout window
+        self.sync_all(self.cfg.delay_before_readout_repeats_treg)
         self.read(0,0,"lower",2)
-        self.condj(0,2,'<',self.r_thresh,"wait_for_trigger")
+        # self.condj(0,2,'<',self.r_thresh,"wait_for_trigger")
 
-        self.sync_all(self.cfg.delay_after_readout_window_to_mw_treg) # align channels and wait 50ns
+        # self.sync_all(self.cfg.delay_after_readout_window_to_mw_treg) # align channels and wait 50ns
 
-        # self.sync_all(self.cfg.inherent_trigger_to_pulses_delay_treg)
-        # self.trigger(pins = [self.cfg.pmod_out_pin], 
-        #              width = self.cfg.pmod_out_pulse_width_treg)
-        # self.sync_all(self.cfg.pmod_out_trig_delay_treg)
+        # # self.sync_all(self.cfg.inherent_trigger_to_pulses_delay_treg)
+        # # self.trigger(pins = [self.cfg.pmod_out_pin], 
+        # #              width = self.cfg.pmod_out_pulse_width_treg)
+        # # self.sync_all(self.cfg.pmod_out_trig_delay_treg)
 
-        # set coarse and fine registers based on duration. coarse is x//64 and then multiply by 4 to get treg units
-        self.bitwi(self.coarse_mw_register.page, self.coarse_mw_register.addr, self.mw_duration_register.addr, ">>", int(np.log2(self.mw_pulse_waveform_len_tdds)))
-        self.bitwi(self.coarse_mw_register.page, self.coarse_mw_register.addr, self.coarse_mw_register.addr, "<<", int(np.log2(self.mw_pulse_waveform_len_treg)))
-        self.bitwi(self.fine_mw_register.page, self.fine_mw_register.addr, self.mw_duration_register.addr, "&", self.mw_pulse_waveform_len_tdds - 1)
+        # # set coarse and fine registers based on duration. coarse is x//64 and then multiply by 4 to get treg units
+        # self.bitwi(self.coarse_mw_register.page, self.coarse_mw_register.addr, self.mw_duration_register.addr, ">>", int(np.log2(self.mw_pulse_waveform_len_tdds)))
+        # self.bitwi(self.coarse_mw_register.page, self.coarse_mw_register.addr, self.coarse_mw_register.addr, "<<", int(np.log2(self.mw_pulse_waveform_len_treg)))
+        # self.bitwi(self.fine_mw_register.page, self.fine_mw_register.addr, self.mw_duration_register.addr, "&", self.mw_pulse_waveform_len_tdds - 1)
         
-        # if there is no coarse part just do fine part
-        self.condj(self.coarse_mw_register.page, self.coarse_mw_register.addr, "==", 0, "JUMP_NO_COARSE")
+        # # if there is no coarse part just do fine part
+        # self.condj(self.coarse_mw_register.page, self.coarse_mw_register.addr, "==", 0, "JUMP_NO_COARSE")
 
-        # since using sync all (and need to use it for accurate timing), it will always play a pulse so need to subtract onewaveform length
-        self.coarse_mw_register.set_to(self.coarse_mw_register, "-", self.mw_pulse_waveform_len_treg, physical_unit=False)
-        self.set_pulse_registers(ch=self.cfg.mw_channel, waveform=f"pulse_{self.mw_pulse_waveform_len_tdds}", mode = "periodic")
-        self.pulse(ch=self.cfg.mw_channel) 
-        self.sync_all()
-        self.sync(self.coarse_mw_register.page, self.coarse_mw_register.addr)
+        # # since using sync all (and need to use it for accurate timing), it will always play a pulse so need to subtract onewaveform length
+        # self.coarse_mw_register.set_to(self.coarse_mw_register, "-", self.mw_pulse_waveform_len_treg, physical_unit=False)
+        # self.set_pulse_registers(ch=self.cfg.mw_channel, waveform=f"pulse_{self.mw_pulse_waveform_len_tdds}", mode = "periodic")
+        # self.pulse(ch=self.cfg.mw_channel) 
+        # self.sync_all()
+        # self.sync(self.coarse_mw_register.page, self.coarse_mw_register.addr)
 
-        self.label("JUMP_NO_COARSE")
-        self.set_pulse_registers(ch=self.cfg.mw_channel, waveform=f"pulse_{0}", mode = "oneshot")
-        self.address_register.set_to(self.fine_mw_register, '*', self.mw_pulse_waveform_len_treg, physical_unit = False)
-        self.pulse(ch=self.cfg.mw_channel)
-        self.sync_all(self.cfg.pulse_seq_delay_treg)
+        # self.label("JUMP_NO_COARSE")
+        # self.set_pulse_registers(ch=self.cfg.mw_channel, waveform=f"pulse_{0}", mode = "oneshot")
+        # self.address_register.set_to(self.fine_mw_register, '*', self.mw_pulse_waveform_len_treg, physical_unit = False)
+        # self.pulse(ch=self.cfg.mw_channel)
+        # self.sync_all(self.cfg.pulse_seq_delay_treg)
 
         
 

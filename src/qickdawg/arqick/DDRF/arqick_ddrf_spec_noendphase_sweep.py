@@ -49,7 +49,7 @@ class DDRFSpecFineRes(StandardOps, NVAveragerProgram):
             waveform="half_pi_0",
             freq=self.cfg.freq_freg,
             gain=self.cfg.mw_gain,
-            phase=self.deg2reg(0),
+            phase=self.deg2reg(-90),
         )
         self.offset_computations(pi2_after=True, delay_tau_tdds=self.cfg.delay_tdds)
         self.sync(self.treg_offset_register.page, self.treg_offset_register.addr)
