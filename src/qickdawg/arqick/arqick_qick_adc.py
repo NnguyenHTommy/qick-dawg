@@ -46,6 +46,7 @@ class QickAdcTesting(NVAveragerProgram):
        self.synci(500)  # give processor some time to configure pulses
 
    def body(self):
+        self.mathi(0, 2, 2, "==", 0)
         self.set_pulse_registers(ch=self.cfg.mw_channel, phase=self.deg2reg(90), gain=self.cfg.gain)        
         self.trigger(
             pins=[self.cfg.pmod_out_pin],

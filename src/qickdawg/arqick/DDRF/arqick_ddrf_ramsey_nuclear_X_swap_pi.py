@@ -1,12 +1,11 @@
 '''
-Ramsey nuclear Y with reduced swap in beginning
+Ramsey nuclear X with reduced swap in beginning with DDRF with pi pulse
 '''
-
+import numpy as np
 from qickdawg.nvpulsing.nvaverageprogram import NVAveragerProgram
-from qickdawg.nvpulsing.nvqicksweep import NVQickSweep
 from qickdawg.arqick.standard_ops import StandardOps
 
-class RamseyNuclearYSwap(StandardOps, NVAveragerProgram):
+class RamseyNuclearXSwapDDRFPi(StandardOps, NVAveragerProgram):
 
     required_cfg = [
         # params that usually won't change
@@ -24,37 +23,14 @@ class RamseyNuclearYSwap(StandardOps, NVAveragerProgram):
         "freq_freg",  # microwave freq
         "mw_pi2_tdds",  # length of pi/2 pulse
 
-        "delay_tdds_start",
-        "delay_tdds_end",
-        "nsweep_points",
+        "delay_tdds",
         "C13_measurement_delay_tdds",
         "delay_tdds_gate_crxpi2",
         "n_cpmg_gate_crxpi2",
-        "delay_tdds_gate_rzpi2",
-        "n_cpmg_gate_rzpi2",
-        "delay_tdds_gate_minus_rzpi2",
     ]
 
     def initialize(self):
         self.init()
-
-        self.delay_register = self.new_gen_reg(
-            self.cfg.mw_channel,
-            name='delay',
-            init_val=0,
-        )
-
-        self.add_sweep(
-            NVQickSweep(
-                self,
-                self.delay_register,
-                self.cfg.delay_tdds_start,
-                self.cfg.delay_tdds_end,
-                self.cfg.nsweep_points,
-            )
-        )
-        
-
         self.synci(200)  # give processor some time to configure pulses
 
     def body(self):
@@ -77,30 +53,65 @@ class RamseyNuclearYSwap(StandardOps, NVAveragerProgram):
         self.pulse(ch=self.cfg.mw_channel)
         self.sync_all()
 
-        # n RZ(pi/2)
-        self.cpmg_xy8_gate(gate_index=1, pi_2_pulse_before=True, delay_tau_tdds=self.cfg.delay_tdds_gate_rzpi2, n_cpmg_pulses=self.cfg.n_cpmg_gate_rzpi2)
-
-        # e-n CROTX(pi/2)
-        self.tdds_offset_register.set_to(self.tdds_offset_register, '+', self.cfg.delay_tdds_gate_rzpi2 - self.cfg.delay_tdds_gate_crxpi2)
-        self.cpmg_xy8_gate(gate_index=2, pi_2_pulse_before=False, delay_tau_tdds=self.cfg.delay_tdds_gate_crxpi2, n_cpmg_pulses=self.cfg.n_cpmg_gate_crxpi2)
+        # e-n CROTY(-+pi/2)
+        self.cpmg_xy8_gate(gate_index=1, pi_2_pulse_before=True, delay_tau_tdds=self.cfg.delay_tdds_gate_crxpi2, n_cpmg_pulses=self.cfg.n_cpmg_gate_crxpi2)
 
         # wait for optical pump
         self.tdds_offset_register.set_to(self.tdds_offset_register, '+', self.cfg.C13_measurement_delay_tdds)
         
-        self.cpmg_xy8_gate(gate_index=3, pi_2_pulse_before=False, delay_tau_tdds=self.cfg.delay_tdds_gate_crxpi2, n_cpmg_pulses=self.cfg.n_cpmg_gate_crxpi2)
-        self.tdds_offset_register.set_to(self.tdds_offset_register, '+', self.delay_register)
+        # e-n CROTX(pi/2)
+        self.cpmg_xy8_gate(gate_index=2, pi_2_pulse_before=False, delay_tau_tdds=self.cfg.delay_tdds_gate_crxpi2, n_cpmg_pulses=self.cfg.n_cpmg_gate_crxpi2)
         
-        # n Rz(-pi/2)
-        self.tdds_offset_register.set_to(self.tdds_offset_register, '+', self.cfg.delay_tdds_gate_minus_rzpi2)
+        # e RX(pi)
+        self.set_pulse_registers(ch=self.cfg.mw_channel, waveform="pi_0", freq=self.cfg.freq_freg, gain=self.cfg.mw_gain, phase=self.deg2reg(0))
+        self.tdds_offset_register.set_to(self.tdds_offset_register, '+', self.cfg.delay_tdds_gate_crxpi2 - self.pi_to_pi_correction_tdds - self.pi_len_unused_tdds)
+        # Coarse delay in treg units.
+        self.bitwi(
+            self.tdds_offset_register.page,
+            self.treg_offset_register.addr,
+            self.tdds_offset_register.addr,
+            ">>",
+            int(np.log2(self.samps_per_clk)),
+        )
 
-       # e RY(pi/2)
-        self.set_pulse_registers(ch=self.cfg.mw_channel, waveform="half_pi_0", freq=self.cfg.freq_freg, gain=self.cfg.mw_gain, phase=self.deg2reg(90))
-        self.offset_computations(pi2_after=True, delay_tau_tdds=self.cfg.delay_tdds_gate_crxpi2)
+        # Fine offset in tdds units.
+        self.bitwi(
+            self.tdds_offset_register.page,
+            self.tdds_offset_register.addr,
+            self.tdds_offset_register.addr,
+            "&",
+            self.samps_per_clk - 1,
+        )
+
+        # Waveform select from fine offset.
+        self.address_register.set_to(
+            self.tdds_offset_register,
+            '*',
+            self.pi_waveform_len_treg + self.half_pi_waveform_len_treg,
+            physical_unit=False,
+        )
+        self.address_register.set_to(
+                self.address_register,
+                '+',
+                self.half_pi_waveform_len_treg,
+                physical_unit=False,
+            )
         self.sync(self.treg_offset_register.page, self.treg_offset_register.addr)
         self.pulse(ch=self.cfg.mw_channel)
         self.sync_all()
+
+        # ramsey wait tau
+        self.tdds_offset_register.set_to(self.tdds_offset_register, '+', self.cfg.delay_tdds)
+
+       # e RY(-pi/2)
+        self.set_pulse_registers(ch=self.cfg.mw_channel, waveform="half_pi_0", freq=self.cfg.freq_freg, gain=self.cfg.mw_gain, phase=self.deg2reg(-90))
+        self.offset_computations(pi2_after=True, delay_tau_tdds=0)
+        self.sync(self.treg_offset_register.page, self.treg_offset_register.addr)
+        self.pulse(ch=self.cfg.mw_channel)
+        self.sync_all()
+
         # e-n CROTX(pi/2)
-        self.cpmg_xy8_gate(gate_index=4, pi_2_pulse_before=True, delay_tau_tdds=self.cfg.delay_tdds_gate_crxpi2, n_cpmg_pulses=self.cfg.n_cpmg_gate_crxpi2)
+        self.cpmg_xy8_gate(gate_index=3, pi_2_pulse_before=True, delay_tau_tdds=self.cfg.delay_tdds_gate_crxpi2, n_cpmg_pulses=self.cfg.n_cpmg_gate_crxpi2)
 
         # e RX(pi/2)
         self.set_pulse_registers(ch=self.cfg.mw_channel, waveform="half_pi_0", freq=self.cfg.freq_freg, gain=self.cfg.mw_gain, phase=self.deg2reg(0))
