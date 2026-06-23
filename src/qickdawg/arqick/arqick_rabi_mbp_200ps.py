@@ -10,7 +10,7 @@ from qickdawg.nvpulsing.nvqicksweep import NVQickSweep
 import numpy as np
 
 
-class RabiMbiFineRes(NVAveragerProgram):
+class RabiMbpFineRes(NVAveragerProgram):
     '''
     Rabi sub-nanosecond resolution pulsing program
     '''
@@ -26,18 +26,13 @@ class RabiMbiFineRes(NVAveragerProgram):
         "pmod_out_pin",  # should be 0 for PMOD0_0
         "pmod_out_pulse_width_treg",  # 50ns is reasonable
         "pmod_out_trig_delay_treg",
-        # delay between trigger and pulse seq start. this is added to the already 198 inherent ns delay so putting 300 means 198+300=498ns delay
         "inherent_trigger_to_pulses_delay_treg",  # should be 209.27ns
         "pulse_seq_delay_treg",  # delay between pulse seq end and trigger start of next seq
 
-        "delay_after_readout_window_to_mw_treg",
-        "inherent_trigger_to_pulses_delay_treg",
         "adc_channel",
         "adc_trig_offset_treg",
         "readout_threshold",
         "readout_integration_treg",
-        "extra_delay_treg",
-        "t_buffer_treg",
         "qick_processing_time_after_readout_treg",
         "delay_before_readout_repeats_treg",
         "delay_after_first_pmod_out_treg",
