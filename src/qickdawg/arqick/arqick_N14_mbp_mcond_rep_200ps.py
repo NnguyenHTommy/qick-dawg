@@ -7,7 +7,7 @@ from qickdawg.nvpulsing.nvqicksweep import NVQickSweep
 from qickdawg.arqick.standard_ops import StandardOps
 import numpy as np
 
-class N14MbpFineRes(StandardOps, NVAveragerProgram):
+class N14MbpMcondRepFineRes(StandardOps, NVAveragerProgram):
 
     required_cfg = [
         # params that usually won't change
@@ -48,6 +48,7 @@ class N14MbpFineRes(StandardOps, NVAveragerProgram):
         "delay_from_mbi_mw_to_ttl5_readout_treg",
         "pmod_out_trig_to_last_mw_delay_treg",
         "delay_after_ttl5_pulse_nv_n14_to_sr_tdds",
+        "pmod_out_trig_to_first_mw1_delay_treg",
     ]
 
     def initialize(self):
@@ -111,7 +112,6 @@ class N14MbpFineRes(StandardOps, NVAveragerProgram):
 
     def body(self):
         self.mathi(0, 2, 2, "==", 0)
-        self.label("wait_for_trigger")
 
         # self.pmod_trigger_sequence()
         self.sync_all(self.cfg.inherent_trigger_to_pulses_delay_treg)
@@ -124,7 +124,8 @@ class N14MbpFineRes(StandardOps, NVAveragerProgram):
         self.pulse(ch=self.cfg.mw_channel)
         self.sync_all()
 
-        # N14 specific pi pulse for MBI
+        self.label("wait_for_trigger")
+        # MCond: N14 specific pi pulse for MBI
         self.set_pulse_registers(ch=self.cfg.mw_channel, waveform="mBI_pi", freq=self.cfg.mBI_freq_freg, gain=self.cfg.mBI_mw_gain, phase=self.deg2reg(0))
         self.tdds_offset_register.set_to(self.mBI_offset_tdds)
         self.bitwi(
@@ -156,6 +157,11 @@ class N14MbpFineRes(StandardOps, NVAveragerProgram):
         self.read(0,0,"lower",2)
         self.condj(0,2,'>',self.r_thresh,"skip_to_mw_pulse")
         self.sync_all(self.cfg.delay_before_first_mw_repeats_treg)      # w/ -209ns
+        
+        self.tdds_offset_register.reset()
+        self.sync_all(self.cfg.inherent_trigger_to_pulses_delay_treg)
+        self.trigger(pins=[self.cfg.pmod_out_pin], width=self.cfg.pmod_out_pulse_width_treg)
+        self.sync_all(self.cfg.pmod_out_trig_to_first_mw1_delay_treg)
         self.condj(0,2,'<',self.r_thresh,"wait_for_trigger")
 
         # Fire out pmod
