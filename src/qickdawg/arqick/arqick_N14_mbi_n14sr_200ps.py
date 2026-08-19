@@ -1,5 +1,5 @@
 '''
-N14 Mbp
+N14 MBI, Pass = N; Repeats N14 SR
 '''
 
 from qickdawg.nvpulsing.nvaverageprogram import NVAveragerProgram
@@ -7,7 +7,7 @@ from qickdawg.nvpulsing.nvqicksweep import NVQickSweep
 from qickdawg.arqick.standard_ops import StandardOps
 import numpy as np
 
-class N14MbpMcondRepFineRes(StandardOps, NVAveragerProgram):
+class N14MBIN14SRRepeatsAnyNFineRes(StandardOps, NVAveragerProgram):
 
     required_cfg = [
         # params that usually won't change
@@ -47,19 +47,22 @@ class N14MbpMcondRepFineRes(StandardOps, NVAveragerProgram):
         "delay_before_first_mw_repeats_treg",
         "delay_from_mbi_mw_to_ttl5_readout_treg",
         "pmod_out_trig_to_last_mw_delay_treg",
+        "pmod_out_trig_to_n14sr_repeats_treg",
+        "delay_from_n14_sr_to_ttl5_readout_treg",
         "delay_after_ttl5_pulse_nv_n14_to_sr_tdds",
-        "pmod_out_trig_to_first_mw1_delay_treg",
+
+        "n_mcond",
     ]
 
     def initialize(self):
         self.init()
         self.setup_readout()
         self.mathi(0, 2, 2, "==", 0)
-        self.r_thresh = 6
+        self.r_thresh = 7
         self.regwi(0, self.r_thresh, self.cfg.readout_threshold)
 
         if self.cfg.mBI_pi_tdds % 2 != 0 or self.cfg.sweep_pi_tdds % 2 != 0:
-            raise ValueError("For this sequence, we require the MBI pi pulse and the sweep pi pulse to have an even number of tdds for easier timing alignment. Please adjust")
+            raise ValueError("For this sequence, we require the MBI pi pulse and the sweep pi pulse to have even number of tdds for easier timing alignment. Please adjust")
         self.mBI_pi_waveform_len_treg = max(
             int(np.ceil((self.cfg.mBI_pi_tdds + self.samps_per_clk - 1) / self.samps_per_clk)), 3
         )
@@ -73,6 +76,7 @@ class N14MbpMcondRepFineRes(StandardOps, NVAveragerProgram):
         q_data *= self.soccfg.get_maxv(self.cfg.mw_channel)
         self.add_envelope(ch=self.cfg.mw_channel, name="mBI_pi", idata=i_data, qdata=q_data)
         self.mBI_pi_len_unused_tdds = self.mBI_pi_waveform_len_treg * self.samps_per_clk - self.cfg.mBI_pi_tdds
+        # print("self.mBI_pi_len_unused_tdds:", self.mBI_pi_len_unused_tdds)
 
         self.sweep_pi_waveform_len_treg = max(
             int(np.ceil((self.cfg.sweep_pi_tdds + self.samps_per_clk - 1) / self.samps_per_clk)), 3
@@ -80,6 +84,7 @@ class N14MbpMcondRepFineRes(StandardOps, NVAveragerProgram):
         # self.sweep_offset_tdds = int(self.cfg.N14_measurement_delay_tdds - self.mBI_pi_len_unused_tdds - (self.cfg.mBI_pi_tdds/2 + self.cfg.sweep_pi_tdds/2))
         self.sweep_offset_tdds = self.cfg.delay_after_ttl5_pulse_nv_n14_to_sr_tdds
 
+        # print("self.sweep_offset_tdds:", self.sweep_offset_tdds)
         self.sweep_offset_mod_16_tdds = self.sweep_offset_tdds % self.samps_per_clk
         i_data = np.zeros(self.sweep_pi_waveform_len_treg * self.samps_per_clk)
         q_data = np.zeros(self.sweep_pi_waveform_len_treg * self.samps_per_clk)
@@ -98,6 +103,13 @@ class N14MbpMcondRepFineRes(StandardOps, NVAveragerProgram):
             init_val=self.cfg.freq_start_freg,
         )
 
+        # Mcond loop register
+        self.n_mcond_register = self.new_gen_reg(
+            self.cfg.mw_channel,
+            name='nmcond',
+            init_val=self.cfg.n_mcond - 2,
+        )
+
         self.add_sweep(
             NVQickSweep(
                 self,
@@ -107,25 +119,30 @@ class N14MbpMcondRepFineRes(StandardOps, NVAveragerProgram):
                 self.cfg.nsweep_points,
             )
         )
-        
+
+        print("freq", self.freq_sweep_register.page, self.freq_sweep_register.addr)
+        print("tdds", self.tdds_offset_register.page, self.tdds_offset_register.addr)
+        print("mwfreq", self.mw_frequency_register.page, self.mw_frequency_register.addr)
+        print("nmcond", self.n_mcond_register.page, self.n_mcond_register.addr)
         self.synci(200)  # give processor some time to configure pulses
 
     def body(self):
         self.mathi(0, 2, 2, "==", 0)
+        self.label("wait_for_trigger_one")
 
         # self.pmod_trigger_sequence()
-        self.sync_all(self.cfg.inherent_trigger_to_pulses_delay_treg)
+        self.sync_all(self.cfg.inherent_trigger_to_pulses_delay_treg)  #  +209ns
         self.trigger(pins=[self.cfg.pmod_out_pin], width=self.cfg.pmod_out_pulse_width_treg)
         self.sync_all(self.cfg.pmod_out_trig_delay_treg)
         self.tdds_offset_register.reset()
+        self.n_mcond_register.reset()
 
         # electron pi pulse
         self.set_pulse_registers(ch=self.cfg.mw_channel, waveform="pi_0", freq=self.cfg.freq_freg, gain=self.cfg.mw_gain, phase=self.deg2reg(0))
         self.pulse(ch=self.cfg.mw_channel)
         self.sync_all()
 
-        self.label("wait_for_trigger")
-        # MCond: N14 specific pi pulse for MBI
+        # N14 specific pi pulse for MBI
         self.set_pulse_registers(ch=self.cfg.mw_channel, waveform="mBI_pi", freq=self.cfg.mBI_freq_freg, gain=self.cfg.mBI_mw_gain, phase=self.deg2reg(0))
         self.tdds_offset_register.set_to(self.mBI_offset_tdds)
         self.bitwi(
@@ -145,33 +162,60 @@ class N14MbpMcondRepFineRes(StandardOps, NVAveragerProgram):
         self.sync(self.treg_offset_register.page, self.treg_offset_register.addr)
         self.pulse(ch=self.cfg.mw_channel)
         self.sync_all(self.cfg.delay_from_mbi_mw_to_ttl5_readout_treg)     # has 2 inherent mw durations included into this delay
-
-        # wait for readout
-        self.tdds_offset_register.set_to(self.sweep_offset_tdds)
-
+        
+        # ##
         self.sync_all(self.cfg.inherent_trigger_to_pulses_delay_treg)   #  +209ns
         self.trigger(pins=[self.cfg.pmod_out_pin],
                 adcs=[self.cfg.adc_channel],
                 width=self.cfg.readout_integration_treg)
         self.wait_all(200) # 651.47 ns pause until 200 clocks past the end of the readout window
         self.read(0,0,"lower",2)
-        self.condj(0,2,'>',self.r_thresh,"skip_to_mw_pulse")
+        self.condj(0,2,'>',self.r_thresh,"skip_to_mw_two_pulse")
         self.sync_all(self.cfg.delay_before_first_mw_repeats_treg)      # w/ -209ns
-        
-        self.tdds_offset_register.reset()
-        self.sync_all(self.cfg.inherent_trigger_to_pulses_delay_treg)
-        self.trigger(pins=[self.cfg.pmod_out_pin], width=self.cfg.pmod_out_pulse_width_treg)
-        self.sync_all(self.cfg.pmod_out_trig_to_first_mw1_delay_treg)
-        self.condj(0,2,'<',self.r_thresh,"wait_for_trigger")
+        self.condj(0,2,'<',self.r_thresh,"wait_for_trigger_one")
 
         # Fire out pmod
         # wait a delay of duration = ttl2 processing time + op + after_mw_buffer
-        self.label("skip_to_mw_pulse")
+        self.label("skip_to_mw_two_pulse")
         self.sync_all(self.cfg.qick_processing_time_after_qick_readout_treg)
         self.trigger(pins = [self.cfg.pmod_out_pin],
                      width = self.cfg.pmod_out_pulse_width_treg)
-        self.sync_all(self.cfg.pmod_out_trig_to_last_mw_delay_treg)     # w/ -209ns
-        # # 
+        # self.sync_all(self.cfg.pmod_out_trig_to_last_mw_delay_treg)     # w/ -209ns
+        self.sync_all(self.cfg.pmod_out_trig_to_n14sr_repeats_treg) # 20us
+
+        ##
+
+        self.label("LOOP_n_mcond")
+
+        #### PMOD trigger to TTL2, wait for N14 SR to finish
+        self.sync_all(self.cfg.delay_from_n14_sr_to_ttl5_readout_treg)
+
+        # ##
+        self.sync_all(self.cfg.inherent_trigger_to_pulses_delay_treg)   #  +209ns
+        self.trigger(pins=[self.cfg.pmod_out_pin],
+                adcs=[self.cfg.adc_channel],
+                width=self.cfg.readout_integration_treg)
+        self.wait_all(200) # 651.47 ns pause until 200 clocks past the end of the readout window
+        self.read(0,0,"lower",2)
+        self.condj(0,2,'>',self.r_thresh,"skip_to_mw_three_pulse")
+        self.sync_all(self.cfg.delay_before_first_mw_repeats_treg)      # w/ -209ns
+        self.condj(0,2,'<',self.r_thresh,"wait_for_trigger_one")
+
+        # Fire out pmod
+        # wait a delay of duration = ttl2 processing time + op + after_mw_buffer
+        self.label("skip_to_mw_three_pulse")
+        self.sync_all(self.cfg.qick_processing_time_after_qick_readout_treg)
+        self.trigger(pins = [self.cfg.pmod_out_pin],
+                     width = self.cfg.pmod_out_pulse_width_treg)
+        self.sync_all(self.cfg.pmod_out_trig_to_last_mw_delay_treg)     # w/ -209ns        
+        ####
+
+        self.loopnz(self.n_mcond_register.page, 
+                    self.n_mcond_register.addr, 
+                    'LOOP_n_mcond')
+        
+        # wait for readout
+        self.tdds_offset_register.set_to(self.sweep_offset_tdds)
 
         # frequency sweep pi pulse
         self.set_pulse_registers(ch=self.cfg.mw_channel, waveform="sweep_pi", freq=self.cfg.freq_freg, gain=self.cfg.sweep_mw_gain, phase=self.deg2reg(0))
@@ -193,5 +237,3 @@ class N14MbpMcondRepFineRes(StandardOps, NVAveragerProgram):
         self.sync(self.treg_offset_register.page, self.treg_offset_register.addr)
         self.pulse(ch=self.cfg.mw_channel)
         self.sync_all(self.cfg.pulse_seq_delay_treg)
-
-        
