@@ -64,7 +64,7 @@ class RamseyNuclearXSwapDDRF(StandardOps, NVAveragerProgram):
         # ramsey wait tau
         self.tdds_offset_register.set_to(self.tdds_offset_register, '+', self.cfg.delay_tdds)
 
-       # e RY(pi/2)
+        # e RY(pi/2)
         self.set_pulse_registers(ch=self.cfg.mw_channel, waveform="half_pi_0", freq=self.cfg.freq_freg, gain=self.cfg.mw_gain, phase=self.deg2reg(90))
         self.offset_computations(pi2_after=True, delay_tau_tdds=self.cfg.delay_tdds_gate_crxpi2)
         self.sync(self.treg_offset_register.page, self.treg_offset_register.addr)
