@@ -63,14 +63,19 @@ class NVQickSweep(AbsQickSweep):
         Run when an instance of NVQickSweep is created
         """
 
+        if (isinstance(expts, (bool, np.bool_))
+                or not isinstance(expts, (int, np.integer)) or expts < 1):
+            raise ValueError("expts must be a positive integer")
+
         super().__init__(prog)
         self.reg = reg
 
         self.start = start
         self.stop = stop
-        self.expts = expts
+        self.expts = int(expts)
 
-        step_val = (stop - start) / (expts-1)
+        # A one-point sweep measures start; stop is not visited.
+        step_val = (stop - start) / (expts-1) if expts > 1 else 0
 
         self.step_val = step_val
 
@@ -101,7 +106,13 @@ class NVQickSweep(AbsQickSweep):
             self.numerator = int(self.numerator)
             self.denominator = int(self.denominator)
             self.nshift = int(np.log2(self.denominator))
-            self.temp_reg = self.prog.new_gen_reg(self.reg.page)
+            if self.expts > 1:
+                x = int(self.start)
+                if x + (x >> self.nshift) <= x:
+                    raise ValueError(
+                        "Exponential sweep cannot advance from start={} with factor={}".format(
+                            self.start, self.scaling_factor))
+                self.temp_reg = self.prog.new_gen_reg(self.reg.page)
 
     def get_sweep_pts(self):
         '''
@@ -111,6 +122,8 @@ class NVQickSweep(AbsQickSweep):
             with setps determined by self.scaling_factor. see qickdawg.int_exp_scale for details 
         '''
 
+        if self.expts == 1:
+            return np.array([self.start])
         if self.scaling_mode == 'linear':
             return np.linspace(self.start, self.stop, self.expts)
         elif self.scaling_mode == 'exponential':
@@ -130,6 +143,9 @@ class NVQickSweep(AbsQickSweep):
             caluclates 1/2*initial value, then adds 1/2*initial value to the inital value
             final_value = initial_value + 1/2 initial_value == 3/2*initial_value
         """
+        # This is a host-side assembly-generation decision, not a tProc branch.
+        if self.expts == 1:
+            return
         if self.scaling_mode == 'linear':
             self.reg.set_to(self.reg, '+', self.step_val)
             if self.label == 'length':

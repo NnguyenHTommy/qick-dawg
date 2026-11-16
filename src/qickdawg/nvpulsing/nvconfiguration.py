@@ -155,15 +155,23 @@ class NVConfiguration(ItemAttribute):
         nsweep_points
             number of points between start and end
             (if excluded, must have delta parameter)
+
+        Point-count sweeps quantize the endpoints to register units, then
+        truncate the signed step toward zero. The actual endpoint is start
+        plus that step times (nsweep_points - 1). One point measures start.
         """
 
-        #assert np.sum(np.array([delta, nsweep_points]) > 0) == 1, 'Either delta and nsweep_points are required, but not both'
+        if (isinstance(nsweep_points, (bool, np.bool_))
+                or not isinstance(nsweep_points, (int, np.integer))
+                or nsweep_points < 0):
+            raise ValueError("nsweep_points must be a positive integer when supplied")
+        if (delta != 0) == (nsweep_points != 0):
+            raise ValueError("Specify either a nonzero delta or positive nsweep_points, not both")
 
         assert unit in [
             'fMHz', 'fGHz', 'freg',
             'tus', 'tns', 'treg',
             'pdegrees', 'preg']
-        assert isinstance(nsweep_points, int)
         if 'reg' in unit:
             assert np.all([isinstance(var, int) for var in (start, stop, delta)]), \
                 "reg units require int start, stop, and delta"
@@ -196,14 +204,31 @@ class NVConfiguration(ItemAttribute):
 
         elif (delta == 0) & (nsweep_points != 0):
 
-            self.nsweep_points = nsweep_points
-            self.__setattr__(name + '_delta_' + ounit, int(
-                floor((start - stop)
-                      / (nsweep_points - 1))))
+            self.nsweep_points = int(nsweep_points)
+            step_reg = 0
+            if self.nsweep_points > 1:
+                self.__setattr__(name + '_end_' + unit, stop)
+                span = int(self[name + '_end_' + runit]) - int(self[name + '_start_' + runit])
+                if unit == 'pdegrees':
+                    # deg2reg wraps; retain full turns and the requested direction.
+                    phase_scale = 2**self.soccfg['gens'][0]['b_phase'] / 360
+                    span = int(np.round(stop * phase_scale)) - int(np.round(start * phase_scale))
+                elif unit in ('fMHz', 'fGHz'):
+                    # freq2int uses the same quantization without freq2reg's wrap.
+                    scale = 1000 if unit == 'fGHz' else 1
+                    gencfg = self.soccfg['gens'][0]
+                    span = (int(self.soccfg.freq2int(stop * scale, gencfg))
+                            - int(self.soccfg.freq2int(start * scale, gencfg)))
+                step_reg = abs(span) // (self.nsweep_points - 1)
+                if span < 0:
+                    step_reg = -step_reg
+                if step_reg == 0 and start != stop:
+                    raise ValueError("nsweep_points requires a step smaller than one register unit")
+            self.__setattr__(name + '_delta_' + runit, step_reg)
             self.__setattr__(name + '_end_' + runit, (
                 self[name + '_start_' + runit]
                 + self[name + '_delta_' + runit]
-                * self.nsweep_points))
+                * (self.nsweep_points - 1)))
 
         actual_start = self[name + '_start_' + ounit]
         actual_end = self[name + '_end_' + ounit]
@@ -221,6 +246,13 @@ class NVConfiguration(ItemAttribute):
     # the stop is inclusive for delta not equal to 0
     def add_unitless_linear_sweep(self, name, start, stop, delta=0, nsweep_points=0):
 
+        if (isinstance(nsweep_points, (bool, np.bool_))
+                or not isinstance(nsweep_points, (int, np.integer))
+                or nsweep_points < 0):
+            raise ValueError("nsweep_points must be a positive integer when supplied")
+        if (delta != 0) == (nsweep_points != 0):
+            raise ValueError("Specify either a nonzero delta or positive nsweep_points, not both")
+
         for var in [start, stop, delta]:
             assert isinstance(var, int), "Unitless linear sweep requires integer start, stop, delta"
 
@@ -236,9 +268,17 @@ class NVConfiguration(ItemAttribute):
             self[end_name] = (start + delta * (self.nsweep_points - 1))
 
         elif (delta == 0) & (nsweep_points != 0):
-            self.nsweep_points = nsweep_points
-            self[delta_name] = int(floor((stop - start) / (nsweep_points - 1)))
-            self[end_name] = (start + delta * self.nsweep_points)
+            self.nsweep_points = int(nsweep_points)
+            step = 0
+            if self.nsweep_points > 1:
+                span = stop - start
+                step = abs(span) // (self.nsweep_points - 1)
+                if span < 0:
+                    step = -step
+                if step == 0 and start != stop:
+                    raise ValueError("nsweep_points requires a step smaller than one integer unit")
+            self[delta_name] = step
+            self[end_name] = start + step * (self.nsweep_points - 1)
 
         if np.any([self[start_name] != start, self[end_name] != stop,
                    (self[delta_name] != delta) & (delta != 0)]):
